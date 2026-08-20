@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CheaterWatcher.Api/CheaterWatcher.Api.csproj" />
+  </Folder>
+</Solution>
