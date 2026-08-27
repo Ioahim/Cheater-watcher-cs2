@@ -1,0 +1,127 @@
+import type { Account, MapRank, Match } from "./types";
+
+function compLevels(levels: number[]): MapRank[] {
+  const maps = [
+    "Cache", "Anubis", "Inferno", "Mirage", "Dust II", "Nuke", "Ancient",
+    "Train", "Vertigo", "Overpass", "Boulder", "Fachwerk", "Shelter",
+    "Office", "Italy",
+  ];
+  return maps.map((map, i) => ({ map, level: levels[i] }));
+}
+
+export const mockAccounts: Account[] = [
+  {
+    id: 1,
+    name: "Account 1",
+    premierRating: 18342,
+    wingmanLevel: 15,
+    competitiveRanks: compLevels([16, 14, 15, 17, 13, 15, 12, 11, 10, 9, 8, 7, 9, 12, 13]),
+  },
+  {
+    id: 2,
+    name: "Account 2",
+    premierRating: 9800,
+    wingmanLevel: 10,
+    competitiveRanks: compLevels([11, 12, 10, 9, 13, 8, 9, 7, 6, 5, 4, 5, 6, 7, 8]),
+  },
+  {
+    id: 3,
+    name: "Account 3",
+    premierRating: 5230,
+    wingmanLevel: 6,
+    competitiveRanks: compLevels([7, 6, 8, 5, 4, 6, 3, 4, 2, 3, 2, 1, 3, 4, 5]),
+  },
+  {
+    id: 4,
+    name: "Account 4",
+    premierRating: 12750,
+    wingmanLevel: 12,
+    competitiveRanks: compLevels([13, 15, 14, 12, 16, 11, 14, 12, 10, 8, 9, 7, 8, 9, 10]),
+  },
+  {
+    id: 5,
+    name: "Account 5",
+    premierRating: 30450,
+    wingmanLevel: 18,
+    competitiveRanks: compLevels([18, 18, 18, 18, 17, 18, 18, 18, 17, 16, 15, 14, 16, 17, 18]),
+  },
+];
+
+export const mockMatches: Match[] = [
+  {
+    id: "m1",
+    result: "W",
+    score: "13-1",
+    map: "Inferno",
+    mode: "Premier",
+    rank: { kind: "premier", rating: 18342 },
+    date: "02/01/2000",
+  },
+  {
+    id: "m2",
+    result: "L",
+    score: "4-13",
+    map: "Dust II",
+    mode: "Competitive",
+    rank: { kind: "competitive", level: 13 },
+    date: "01/01/2000",
+    suspected: true,
+  },
+  {
+    id: "m3",
+    result: "D",
+    score: "8-8",
+    map: "Inferno",
+    mode: "Wingman",
+    rank: { kind: "wingman", level: 15 },
+    date: "12/30/1999",
+  },
+  {
+    id: "m4",
+    result: "W",
+    score: "16-14",
+    map: "Nuke",
+    mode: "Competitive",
+    rank: { kind: "competitive", level: 15 },
+    date: "12/29/1999",
+  },
+  {
+    id: "m5",
+    result: "L",
+    score: "9-13",
+    map: "Ancient",
+    mode: "Premier",
+    rank: { kind: "premier", rating: 18342 },
+    date: "12/28/1999",
+    flagged: true,
+  },
+  {
+    id: "m6",
+    result: "L",
+    score: "7-13",
+    map: "Anubis",
+    mode: "Competitive",
+    rank: { kind: "competitive", level: 14 },
+    date: "12/27/1999",
+  },
+  {
+    id: "m7",
+    result: "W",
+    score: "9-6",
+    map: "Vertigo",
+    mode: "Wingman",
+    rank: { kind: "wingman", level: 15 },
+    date: "12/26/1999",
+    suspected: true,
+    flagged: true,
+  },
+  {
+    id: "m8",
+    result: "W",
+    score: "13-5",
+    map: "Train",
+    mode: "Competitive",
+    rank: null,
+    date: "12/25/1999",
+  },
+];
