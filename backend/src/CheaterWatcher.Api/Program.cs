@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +29,8 @@ builder.Services.AddOpenApi();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    // "auth" - tight window on credential endpoints.
     options.AddFixedWindowLimiter("auth", limiter =>
     {
         limiter.PermitLimit = 10;
@@ -35,6 +38,44 @@ builder.Services.AddRateLimiter(options =>
         limiter.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
         limiter.QueueLimit = 0;
     });
+
+    // "upload" - guarded because each request streams up to 600 MB to disk.
+    options.AddFixedWindowLimiter("upload", limiter =>
+    {
+        limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+        limiter.QueueLimit = 0;
+    });
+
+    // "share" - guarded because each request triggers a Valve demo download.
+    options.AddFixedWindowLimiter("share", limiter =>
+    {
+        limiter.PermitLimit = 20;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+        limiter.QueueLimit = 0;
+    });
+
+    // "external" - guarded because each request fans out to third-party APIs (Steam/Leetify).
+    options.AddFixedWindowLimiter("external", limiter =>
+    {
+        limiter.PermitLimit = 60;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+        limiter.QueueLimit = 0;
+    });
+
+    // Baseline guard for endpoints that didn't declare a policy.
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(
+        context => RateLimitPartition.GetFixedWindowLimiter("global_" + (context.User.Identity?.IsAuthenticated == true ? "auth" : "anon"),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 300,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0,
+            }));
 });
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
@@ -146,7 +187,7 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        app.Logger.LogError(ex, "Database migration/seeding failed — API will keep running but DB endpoints will error until the database is reachable.");
+        app.Logger.LogError(ex, "Database migration/seeding failed - API will keep running but DB endpoints will error until the database is reachable.");
     }
 }
 

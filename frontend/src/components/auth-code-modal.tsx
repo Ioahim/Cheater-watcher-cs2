@@ -64,7 +64,7 @@ export function AuthCodesModal({
             break;
           case "download_failed":
             setNotice({
-              text: "Couldn't download the demo (code too old?). Remove it and re-enter a recent match, or use Add match manually.",
+              text: "Could not download the demo. Check the code and try again.",
               tone: "warning",
             });
             break;
@@ -82,7 +82,7 @@ export function AuthCodesModal({
     <Modal
       open={open}
       onClose={handleClose}
-      title={account ? `Auth codes — ${account.name}` : "Auth codes"}
+      title={account ? `Auth codes - ${account.name}` : "Auth codes"}
     >
       <div className="space-y-5">
         <p className="text-sm leading-relaxed text-muted">

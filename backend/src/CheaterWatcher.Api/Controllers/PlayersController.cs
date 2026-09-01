@@ -7,6 +7,7 @@ using CheaterWatcher.Api.Services;
 using CheaterWatcher.Api.Services.Leetify;
 using CheaterWatcher.Api.Services.Suspicion;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 namespace CheaterWatcher.Api.Controllers;
@@ -16,6 +17,7 @@ namespace CheaterWatcher.Api.Controllers;
 public class PlayersController(AppDbContext db, LeetifyService leetify, ISuspicionScorer scorer) : ControllerBase
 {
     [HttpGet("{steam64Id}/suspicion")]
+    [EnableRateLimiting("external")]
     public async Task<IActionResult> GetSuspicion(string steam64Id, CancellationToken ct)
     {
         var profile = await leetify.GetProfileAsync(steam64Id, ct);
@@ -64,6 +66,7 @@ public class PlayersController(AppDbContext db, LeetifyService leetify, ISuspici
     }
 
     [HttpGet("{steam64Id}/detail")]
+    [EnableRateLimiting("external")]
     public async Task<IActionResult> GetPlayerDetail(string steam64Id, CancellationToken ct)
     {
         var userId = User.TryGetUserId();

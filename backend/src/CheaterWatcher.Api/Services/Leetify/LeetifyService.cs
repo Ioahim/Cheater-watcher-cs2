@@ -55,7 +55,17 @@ public class LeetifyService(AppDbContext db, LeetifyClient client, IOptions<Leet
             existing.PayloadJson = payload;
             existing.FetchedAt = now;
         }
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Two concurrent requests missed the cache for the same Steam64Id and both tried
+            // to insert (Steam64Id is the primary key). The loser of the race can safely drop
+            // its write - both carry the same fresh payload. Surface the error to the caller
+            // is pointless here, so just return the profile.
+        }
 
         return profile;
     }

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "@/components/auth-provider";
-import { login, register, ApiError, setToken } from "@/lib/api";
+import { login, register, setToken } from "@/lib/api";
 
 export default function LoginPage() {
   const { user, setUser } = useAuth();
@@ -22,18 +22,27 @@ export default function LoginPage() {
     async (event: FormEvent) => {
       event.preventDefault();
       setError("");
+
+      const name = username.trim();
+      if (tab === "register") {
+        if (name.length < 3 || name.length > 32 || !/^[A-Za-z0-9_-]+$/.test(name)) {
+          setError("Username must be 3-32 characters (letters, digits, _ or -).");
+          return;
+        }
+        if (password.length < 8 || password.length > 128) {
+          setError("Password must be 8-128 characters.");
+          return;
+        }
+      }
+
       setSubmitting(true);
       try {
-        const fn = tab === "login" ? login : register;
-        const resp = await fn(username.trim(), password);
+        const resp =
+          (await (tab === "login" ? login : register)(name, password));
         setToken(resp.token);
         setUser(resp.user);
       } catch (e) {
-        if (e instanceof ApiError) {
-          setError(e.message);
-        } else {
-          setError("An unexpected error occurred.");
-        }
+        setError(e instanceof Error ? e.message : "Something went wrong.");
       } finally {
         setSubmitting(false);
       }

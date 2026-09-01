@@ -34,6 +34,13 @@ public sealed class SteamOpenIdService(IHttpClientFactory httpClientFactory, IOp
         if (query["openid.mode"] != "id_res")
             return null;
 
+        // Defend against a callback with a mismatched return_to (association/replay
+        // hardening). The value must point back at the exact callback we issued.
+        var expectedBase = $"{options.Value.ApiBaseUrl.TrimEnd('/')}/api/auth/steam/callback";
+        var returnTo = query["openid.return_to"].ToString();
+        if (!returnTo.StartsWith(expectedBase, StringComparison.OrdinalIgnoreCase))
+            return null;
+
         var fields = query.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToString());
         fields["openid.mode"] = "check_authentication";
 

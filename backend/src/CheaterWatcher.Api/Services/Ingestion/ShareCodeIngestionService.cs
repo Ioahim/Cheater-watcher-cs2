@@ -13,7 +13,7 @@ public sealed record ShareCodeIngestResult(string Status, Guid? MatchId = null);
 /// </summary>
 public class ShareCodeIngestionService(ParseQueue queue, DemoDownloader downloader, DemoStorage storage)
 {
-    public async Task<ShareCodeIngestResult> IngestAsync(
+    public virtual async Task<ShareCodeIngestResult> IngestAsync(
         AppDbContext db, int accountId, string shareCode, CancellationToken ct)
     {
         if (!ShareCode.TryDecode(shareCode, out var info))
@@ -46,7 +46,17 @@ public class ShareCodeIngestionService(ParseQueue queue, DemoDownloader download
             CreatedAt = DateTime.UtcNow,
         };
         db.Matches.Add(match);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // A concurrent ingestion of the same (AccountId, DemoSourceId) won the race
+            // against the unique index. Treat it as a duplicate rather than surfacing
+            // an error that would abort the caller's whole batch.
+            return new ShareCodeIngestResult("duplicate");
+        }
 
         await queue.EnqueueAsync(new ParseJob(match.Id, demoPath), ct);
         return new ShareCodeIngestResult("ingested", match.Id);

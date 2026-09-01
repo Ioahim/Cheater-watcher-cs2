@@ -71,7 +71,7 @@ public class ShareCodePollingWorker(
             switch (outcome.Result)
             {
                 case ShareCodePollResult.NoData:
-                    // Nothing new — stay quiet.
+                    // Nothing new - stay quiet.
                     continue;
                 case ShareCodePollResult.NeedsAttention:
                     logger.LogWarning("Account {AccountId} needs attention: supply a fresh share code or regenerate the auth code", account.Id);
@@ -123,7 +123,18 @@ public class ShareCodePollingWorker(
             };
             db.Matches.Add(match);
             account.LatestShareCode = next;
-            await db.SaveChangesAsync(ct);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                // A concurrent ingest (manual share code, or another poll cycle) won the
+                // race on the unique (AccountId, DemoSourceId) index. The match already
+                // exists; advance the cursor and skip without aborting the poll cycle.
+                db.Entry(match).State = EntityState.Detached;
+                continue;
+            }
 
             await queue.EnqueueAsync(new ParseJob(match.Id, demoPath), ct);
             logger.LogInformation("Ingested match {MatchId} for account {AccountId}", info.MatchId, account.Id);

@@ -9,6 +9,7 @@ using CheaterWatcher.Api.Services.Ingestion;
 using CheaterWatcher.Api.Services.Suspicion;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -29,6 +30,7 @@ public class AccountsController(
     }
 
     [HttpGet]
+    [EnableRateLimiting("external")]
     public async Task<ActionResult<IEnumerable<AccountDto>>> GetAccounts(CancellationToken ct)
     {
         var accounts = await VisibleAccounts()
@@ -102,20 +104,24 @@ public class AccountsController(
             if (newSteam64 != oldSteam64)
                 account.LatestShareCode = null;
         }
-        else
-        {
-            account.LatestShareCode = request.ShareCode.Trim();
-        }
 
         await db.SaveChangesAsync(ct);
 
-        if (!string.IsNullOrWhiteSpace(request.ShareCode))
+        if (string.IsNullOrWhiteSpace(request.ShareCode))
+            return Ok(null);
+
+        var result = await shareIngestion.IngestAsync(db, account.Id, request.ShareCode.Trim(), ct);
+
+        // Only advance the polling cursor once the code actually decodes/ingests (or is a
+        // known duplicate). Persisting it up front could leave polling pointed at an
+        // undecodable or failing share code.
+        if (result.Status is "ingested" or "duplicate")
         {
-            var result = await shareIngestion.IngestAsync(db, account.Id, request.ShareCode.Trim(), ct);
-            return Ok(result);
+            account.LatestShareCode = request.ShareCode.Trim();
+            await db.SaveChangesAsync(ct);
         }
 
-        return Ok(null);
+        return Ok(result);
     }
 
     [Authorize]

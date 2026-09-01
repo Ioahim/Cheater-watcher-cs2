@@ -237,10 +237,10 @@ export function MatchDetailsModal({
       current
         ? {
             ct: current.ct.map((p) =>
-              p.id === player.id ? { ...p, flagged, flagReason: reason ?? p.flagReason, flagNote: note ?? p.flagNote } : p,
+              p.id === player.id ? { ...p, flagged, flagReason: flagged ? (reason ?? p.flagReason) : 0, flagNote: flagged ? (note ?? p.flagNote) : null } : p,
             ),
             t: current.t.map((p) =>
-              p.id === player.id ? { ...p, flagged, flagReason: reason ?? p.flagReason, flagNote: note ?? p.flagNote } : p,
+              p.id === player.id ? { ...p, flagged, flagReason: flagged ? (reason ?? p.flagReason) : 0, flagNote: flagged ? (note ?? p.flagNote) : null } : p,
             ),
           }
         : current,
@@ -262,7 +262,7 @@ export function MatchDetailsModal({
           <p className="py-8 text-center text-sm text-muted">
             {match.status === "Failed"
               ? "This demo could not be parsed, so no match details are available."
-              : "This demo is still processing — details will appear once parsing completes."}
+              : "This demo is still processing - details will appear once parsing completes."}
           </p>
         )}
         {!loading && !error && roster && (

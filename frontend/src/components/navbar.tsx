@@ -6,9 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "./auth-provider";
 
 const navLinks = [
-  { href: "/stats", label: "Stats" },
   { href: "/matches", label: "Matches" },
-  { href: "/settings", label: "Settings" },
+  { href: "/stats", label: "Stats" },
 ];
 
 function SteamIcon({ className }: { className?: string }) {
@@ -103,8 +102,13 @@ export function Navbar() {
                       aria-expanded={menuOpen}
                       className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-2 transition-colors hover:bg-hover"
                     >
-                      <UserAvatar name={user.username} avatarUrl={user.avatarUrl} />
-                      <span className="text-sm font-medium">{user.username}</span>
+                      <UserAvatar
+                        name={user.personaName ?? user.username}
+                        avatarUrl={user.avatarUrl}
+                      />
+                      <span className="text-sm font-medium">
+                        {user.personaName ?? user.username}
+                      </span>
                       <svg
                         viewBox="0 0 24 24"
                         fill="none"

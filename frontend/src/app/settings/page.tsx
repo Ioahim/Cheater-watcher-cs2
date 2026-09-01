@@ -46,6 +46,7 @@ export default function SettingsPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (authLoading || !user) return;
       setLoading(true);
       setError("");
       try {
@@ -67,7 +68,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authLoading, user]);
 
   const selected = accounts.find((a) => a.id === selectedId) ?? null;
 
@@ -169,7 +170,7 @@ export default function SettingsPage() {
               </div>
               <div className="mx-auto w-full max-w-4xl space-y-3">
                 {selected.premierRating != null && (
-                  <RankRow label="Premier" hint="CS Rating — all modes pool">
+                  <RankRow label="Premier" hint="CS Rating - all modes pool">
                     <PremierBadge rating={selected.premierRating} />
                   </RankRow>
                 )}

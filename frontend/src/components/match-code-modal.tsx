@@ -43,11 +43,11 @@ export function AddMatchModal({
         setDone("Match added and queued for parsing.");
         onAdded();
       } else if (result.status === "duplicate") {
-        setDone("That match was already added — each match can only be added once.");
+        setDone("That match was already added.");
       } else if (result.status === "invalid") {
-        setError("Invalid share code. Check the format and try again.");
+        setError("Invalid share code.");
       } else {
-        setError("Could not download that match. Try again later.");
+        setError("Could not download the match.");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add match.");
@@ -60,7 +60,7 @@ export function AddMatchModal({
     <Modal
       open={open}
       onClose={handleClose}
-      title={account ? `Add match — ${account.name}` : "Add match manually"}
+      title={account ? `Add match - ${account.name}` : "Add match manually"}
     >
       <div className="space-y-5">
         <p className="text-sm leading-relaxed text-muted">

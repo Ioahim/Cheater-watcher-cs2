@@ -10,11 +10,18 @@ namespace CheaterWatcher.Api.Services.Auth;
 /// </summary>
 public sealed class JwtKeyProvider(IConfiguration configuration, IHostEnvironment env)
 {
+    private const int MinKeyBytes = 32;
+
     public string Resolve()
     {
         var configured = configuration["Jwt:SecretKey"];
         if (!string.IsNullOrWhiteSpace(configured))
+        {
+            if (Encoding.UTF8.GetByteCount(configured) < MinKeyBytes)
+                throw new InvalidOperationException(
+                    $"Jwt:SecretKey is too short. Provide a key of at least {MinKeyBytes} bytes (or unset it to have one generated automatically).");
             return configured;
+        }
 
         var keyFile = Path.Combine(env.ContentRootPath, "data", "jwt.key");
         Directory.CreateDirectory(Path.GetDirectoryName(keyFile)!);
@@ -26,7 +33,7 @@ public sealed class JwtKeyProvider(IConfiguration configuration, IHostEnvironmen
                 return existing;
         }
 
-        var bytes = new byte[32];
+        var bytes = new byte[MinKeyBytes];
         RandomNumberGenerator.Fill(bytes);
         var generated = Convert.ToBase64String(bytes);
 

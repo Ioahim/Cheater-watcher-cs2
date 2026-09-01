@@ -20,9 +20,11 @@ import type { Account, Match } from "@/lib/types";
 
 export default function MatchesPage() {
   const { user, loading: authLoading } = useAuth();
-  const [accounts, setAccounts] = useState<Account[]>(mockAccounts);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [activeAccountId, setActiveAccountId] = useState<number>(mockAccounts[0].id);
-  const [matches, setMatches] = useState<Match[]>(mockMatches);
+  const [matches, setMatches] = useState<Match[]>([]);
+  const activeAccountIdRef = useRef(activeAccountId);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [usingLiveData, setUsingLiveData] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,13 +34,16 @@ export default function MatchesPage() {
   const fetchIdRef = useRef(0);
 
   const loadMatches = useCallback(async (accountId: number) => {
+    const id = ++fetchIdRef.current;
     try {
       const live = await getAccountMatches(accountId);
+      if (fetchIdRef.current !== id) return;
       setMatches(live);
       setUsingLiveData(true);
       setError(null);
     } catch {
-      setError("Could not load matches — is the backend running?");
+      if (fetchIdRef.current !== id) return;
+      setError("Could not load matches.");
     }
   }, []);
 
@@ -48,6 +53,7 @@ export default function MatchesPage() {
       if (authLoading || !user) {
         setLoading(false);
         setUsingLiveData(false);
+        setAccounts(mockAccounts);
         setMatches(mockMatches);
         return;
       }
@@ -57,17 +63,23 @@ export default function MatchesPage() {
         if (cancelled) return;
         setAccounts(liveAccounts);
         setActiveAccountId(liveAccounts[0]?.id ?? mockAccounts[0].id);
+        activeAccountIdRef.current = liveAccounts[0]?.id ?? mockAccounts[0].id;
         setUsingLiveData(true);
         setError(null);
         if (liveAccounts[0]) {
-          await loadMatches(liveAccounts[0].id);
+          const live = await getAccountMatches(liveAccounts[0].id);
+          if (cancelled) return;
+          setMatches(live);
         } else {
           setMatches([]);
         }
       } catch {
         if (!cancelled) {
+          // Never let demo fixtures masquerade as real data for a logged-in user.
+          setAccounts([]);
+          setMatches([]);
           setUsingLiveData(false);
-          setError("Could not load accounts — is the backend running?");
+          setError("Could not load accounts.");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -76,10 +88,11 @@ export default function MatchesPage() {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, user, loadMatches]);
+  }, [authLoading, user]);
 
   const handleAccountSwitch = async (accountId: number) => {
     setActiveAccountId(accountId);
+    activeAccountIdRef.current = accountId;
     if (usingLiveData) {
       setLoading(true);
       const id = ++fetchIdRef.current;
@@ -92,7 +105,7 @@ export default function MatchesPage() {
         }
       } catch {
         if (fetchIdRef.current === id) {
-          setError("Could not load matches — is the backend running?");
+          setError("Could not load matches.");
         }
       } finally {
         if (fetchIdRef.current === id) setLoading(false);
@@ -112,33 +125,50 @@ export default function MatchesPage() {
       setMatches((current) =>
         current.map((m) => (m.id === match.id ? { ...m, flagged: !nextFlagged } : m)),
       );
-      setError("Could not update flag — is the backend running?");
+      setError("Could not update flag.");
     }
   };
 
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const pollMatchStatus = (matchId: string) => {
     const started = Date.now();
-    const timer = setInterval(async () => {
+    if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    pollTimerRef.current = setInterval(async () => {
       try {
         const status = await getMatchStatus(matchId);
         if (status.status !== "Pending" || Date.now() - started > 120_000) {
-          clearInterval(timer);
+          if (pollTimerRef.current) {
+            clearInterval(pollTimerRef.current);
+            pollTimerRef.current = null;
+          }
           if (status.status === "Failed") {
             setError(status.error ?? "Demo parsing failed.");
           }
           setUploading(false);
-          await loadMatches(activeAccountId);
+          void loadMatches(activeAccountIdRef.current);
         }
       } catch {
-        clearInterval(timer);
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
         setUploading(false);
+        void loadMatches(activeAccountIdRef.current);
       }
     }, 2_000);
   };
 
   const handleUpload = async (file: File) => {
     if (!usingLiveData || !activeAccountId) {
-      setError("Upload requires the backend to be running.");
+      setError("Could not upload.");
       return;
     }
     setUploading(true);
@@ -152,7 +182,7 @@ export default function MatchesPage() {
       }
     } catch {
       setUploading(false);
-      setError("Upload failed — check the file is a valid .dem under 500 MB.");
+      setError("Upload failed. Try again.");
     }
   };
 
@@ -235,7 +265,7 @@ export default function MatchesPage() {
             <p className="px-1 py-8 text-center text-sm text-faint">Loading matches…</p>
           ) : matches.length === 0 ? (
             <p className="px-1 py-8 text-center text-sm text-faint">
-              No matches yet — upload a .dem or connect a share code.
+              No matches yet - upload a .dem or connect a share code.
             </p>
           ) : (
             <MatchHistory

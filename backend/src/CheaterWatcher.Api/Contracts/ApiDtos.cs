@@ -131,7 +131,7 @@ public sealed record AddShareCodeRequest(int AccountId, string ShareCode);
 
 public sealed record AddShareCodeResponse(string Status, Guid? MatchId = null);
 
-public sealed record AuthUserDto(int Id, string Username, string? Steam64Id, string? AvatarUrl, int? OwnAccountId);
+public sealed record AuthUserDto(int Id, string Username, string? Steam64Id, string? AvatarUrl, int? OwnAccountId, string? PersonaName = null);
 
 public sealed record RegisterRequest(string Username, string Password);
 

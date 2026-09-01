@@ -188,15 +188,18 @@ public class AuthController(
     private async Task<AuthUserDto> ToDtoAsync(AppUser user, CancellationToken ct)
     {
         int? ownAccountId = null;
+        string? personaName = null;
         if (user.Steam64Id is not null)
         {
-            ownAccountId = await db.Accounts.AsNoTracking()
+            var own = await db.Accounts.AsNoTracking()
                 .Where(a => a.UserId == user.Id && a.Steam64Id == user.Steam64Id)
                 .OrderBy(a => a.Id)
-                .Select(a => (int?)a.Id)
+                .Select(a => new { a.Id, a.Name })
                 .FirstOrDefaultAsync(ct);
+            ownAccountId = own?.Id;
+            personaName = own?.Name;
         }
 
-        return new AuthUserDto(user.Id, user.Username, user.Steam64Id, user.AvatarUrl, ownAccountId);
+        return new AuthUserDto(user.Id, user.Username, user.Steam64Id, user.AvatarUrl, ownAccountId, personaName);
     }
 }

@@ -13,14 +13,20 @@ export default function StatsPage() {
   const [activeAccountId, setActiveAccountId] = useState<number | null>(null);
   const [stats, setStats] = useState<AccountStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const fetchIdRef = useRef(0);
 
   const loadStats = useCallback(async (accountId: number) => {
+    const id = ++fetchIdRef.current;
+    setError(null);
     try {
       const data = await getAccountStats(accountId);
+      if (fetchIdRef.current !== id) return;
       setStats(data);
     } catch {
+      if (fetchIdRef.current !== id) return;
       setStats(null);
+      setError("Could not load stats.");
     }
   }, []);
 
@@ -36,6 +42,7 @@ export default function StatsPage() {
         return;
       }
       setLoading(true);
+      setError(null);
       try {
         const liveAccounts = await getAccounts();
         if (cancelled) return;
@@ -49,6 +56,7 @@ export default function StatsPage() {
         }
       } catch {
         setStats(null);
+        setError("Could not load stats.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -58,6 +66,7 @@ export default function StatsPage() {
 
   const handleAccountSwitch = async (accountId: number) => {
     setActiveAccountId(accountId);
+    setError(null);
     if (!user) {
       setStats(null);
       return;
@@ -68,7 +77,10 @@ export default function StatsPage() {
       const data = await getAccountStats(accountId);
       if (fetchIdRef.current === id) setStats(data);
     } catch {
-      if (fetchIdRef.current === id) setStats(null);
+      if (fetchIdRef.current === id) {
+        setStats(null);
+        setError("Could not load stats.");
+      }
     } finally {
       if (fetchIdRef.current === id) setLoading(false);
     }
@@ -97,9 +109,11 @@ export default function StatsPage() {
 
         {loading ? (
           <p className="py-8 text-center text-sm text-faint">Loading stats…</p>
+        ) : error ? (
+          <p className="py-8 text-center text-sm text-danger">{error}</p>
         ) : !stats ? (
           <p className="py-8 text-center text-sm text-faint">
-            No data available — upload a .dem or connect a share code.
+            No data available - upload a .dem or connect a share code.
           </p>
         ) : (
           <>

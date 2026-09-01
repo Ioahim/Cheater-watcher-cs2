@@ -68,6 +68,7 @@ export interface AuthUser {
   steam64Id: string | null;
   avatarUrl: string | null;
   ownAccountId: number | null;
+  personaName?: string | null;
 }
 
 export interface AuthResponse {

@@ -92,7 +92,10 @@ export function MatchHistory({
                   match.flagged ? "Remove manual flag" : "Manually flag this match"
                 }
                 title={match.flagged ? "Remove manual flag" : "Manually flag this match"}
-                onClick={() => onToggleFlag(match)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleFlag(match);
+                }}
                 className={`transition-colors ${
                   match.flagged
                     ? "text-danger hover:text-danger/70"

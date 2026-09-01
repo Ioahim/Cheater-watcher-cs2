@@ -8,6 +8,7 @@ using CheaterWatcher.Api.Services.Ingestion;
 using CheaterWatcher.Api.Services.Suspicion;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -27,6 +28,7 @@ public class MatchesController(
 
     [HttpPost("upload")]
     [Authorize]
+    [EnableRateLimiting("upload")]
     [RequestSizeLimit(600_000_000)]
     public async Task<ActionResult<UploadResponse>> Upload([FromForm] IFormFile? file, [FromForm] int accountId, CancellationToken ct)
     {
@@ -84,7 +86,22 @@ public class MatchesController(
                 CreatedAt = DateTime.UtcNow,
             };
             db.Matches.Add(match);
-            await db.SaveChangesAsync(ct);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                // A concurrent identical upload won the race on the unique
+                // (AccountId, DemoSourceId) index. Return the already-existing record.
+                System.IO.File.Delete(finalPath);
+                if (db.Entry(match).State != EntityState.Detached)
+                    db.Entry(match).State = EntityState.Detached;
+                var dup = await db.Matches.FirstOrDefaultAsync(m => m.AccountId == accountId && m.DemoSourceId == hash, ct);
+                if (dup is null)
+                    throw;
+                return Ok(new UploadResponse(dup.Id, Duplicate: true));
+            }
 
             await queue.EnqueueAsync(new ParseJob(match.Id, finalPath), ct);
             logger.LogInformation("Queued upload {MatchId} ({File})", match.Id, match.DemoFileName);
@@ -99,6 +116,7 @@ public class MatchesController(
     }
 
     [Authorize]
+    [EnableRateLimiting("share")]
     [HttpPost("share")]
     public async Task<ActionResult<AddShareCodeResponse>> AddShareCode(AddShareCodeRequest request, CancellationToken ct)
     {

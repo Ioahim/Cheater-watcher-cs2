@@ -29,7 +29,15 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+interface RequestOptions {
+  authExpected401?: boolean;
+}
+
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  opts?: RequestOptions,
+): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
     ...Object.fromEntries(
@@ -52,13 +60,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers["Content-Type"] = "application/json";
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers,
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers,
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(0, "Could not reach the server.");
+  }
 
-  if (response.status === 401) {
+  if (response.status === 401 && !opts?.authExpected401) {
     clearToken();
     throw new AuthError();
   }
@@ -145,6 +158,10 @@ export async function uploadDemo(
     headers,
     body: form,
   });
+  if (response.status === 401) {
+    clearToken();
+    throw new AuthError();
+  }
   if (!response.ok && response.status !== 202) {
     throw new Error(`Upload failed with ${response.status}`);
   }
@@ -204,6 +221,10 @@ export async function setPlayerFlag(
       body: flagged ? JSON.stringify({ reason: reason ?? 1, note }) : undefined,
     },
   );
+  if (response.status === 401) {
+    clearToken();
+    throw new AuthError();
+  }
   if (!response.ok && response.status !== 204) {
     throw new Error(`Player flag update failed with ${response.status}`);
   }
@@ -221,6 +242,10 @@ export async function setMatchFlag(
     method: flagged ? "POST" : "DELETE",
     headers,
   });
+  if (response.status === 401) {
+    clearToken();
+    throw new AuthError();
+  }
   if (!response.ok && response.status !== 204) {
     throw new Error(`Flag update failed with ${response.status}`);
   }
@@ -235,7 +260,7 @@ export async function register(
   return request<AuthResponse>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify({ username, password }),
-  });
+  }, { authExpected401: true });
 }
 
 export async function login(
@@ -245,7 +270,7 @@ export async function login(
   return request<AuthResponse>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
-  });
+  }, { authExpected401: true });
 }
 
 export async function getMe(): Promise<AuthUser> {

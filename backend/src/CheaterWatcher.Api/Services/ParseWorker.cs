@@ -50,10 +50,18 @@ public class ParseWorker(
             foreach (var p in pending)
             {
                 if (string.IsNullOrWhiteSpace(p.DemoFileName))
+                {
+                    await MarkFailedAsync(new ParseJob(p.Id, ""), "Demo file name is missing.", ct);
                     continue;
+                }
                 var demoPath = Path.Combine(storage.Root, p.DemoFileName);
-                if (!File.Exists(demoPath))
+                if (!System.IO.File.Exists(demoPath))
+                {
+                    // The demo file is gone (e.g. demo volume wiped). Marking it Failed
+                    // stops it being re-scanned (and stuck Pending forever) on every restart.
+                    await MarkFailedAsync(new ParseJob(p.Id, demoPath), $"Demo file not found on disk: {p.DemoFileName}", ct);
                     continue;
+                }
                 await queue.EnqueueAsync(new ParseJob(p.Id, demoPath), ct);
                 logger.LogInformation("Requeued unparsed match {MatchId} after restart", p.Id);
             }
