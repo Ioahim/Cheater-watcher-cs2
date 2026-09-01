@@ -19,6 +19,7 @@ TestResults/
 # Environment / secrets
 .env
 .env.*
+!.env.example
 *.pfx
 backend/src/CheaterWatcher.Api/data/
 
