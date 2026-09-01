@@ -1,7 +1,12 @@
 "use client";
 
 import type { Account } from "@/lib/types";
-import { CompetitiveBadge, PremierBadge, WingmanBadge } from "./rank-badge";
+import {
+  CompetitiveBadge,
+  PremierBadge,
+  UnrankedBadge,
+  WingmanBadge,
+} from "./rank-badge";
 
 interface AccountCardProps {
   account: Account;
@@ -25,18 +30,42 @@ export function AccountCard({ account, selected, onSelect }: AccountCardProps) {
           : "border-l-2 border-transparent hover:bg-hover"
       }`}
     >
-      <span
-        className={`flex size-12 items-center justify-center rounded-full text-sm font-bold transition-colors ${
-          selected ? "bg-primary text-white" : "bg-surface text-primary-light"
-        }`}
-      >
-        {account.name.charAt(0).toUpperCase()}
-      </span>
+      {account.avatarUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element -- remote Steam avatar, client-only
+        <img
+          src={account.avatarUrl}
+          alt={account.name}
+          className="size-12 rounded-full object-cover"
+        />
+      ) : (
+        <span
+          className={`flex size-12 items-center justify-center rounded-full text-sm font-bold transition-colors ${
+            selected ? "bg-primary text-white" : "bg-surface text-primary-light"
+          }`}
+        >
+          {account.name.charAt(0).toUpperCase()}
+        </span>
+      )}
       <span
         className={`text-sm font-medium ${selected ? "text-foreground" : "text-muted"}`}
       >
         {account.name}
       </span>
+      {account.steamLinked && (
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+            account.trackingEnabled
+              ? "bg-success/10 text-success"
+              : "bg-amber-400/10 text-amber-400"
+          }`}
+        >
+          {account.needsShareCode
+            ? "Add share code"
+            : account.trackingEnabled
+              ? "Auto-tracking"
+              : "Add auth code"}
+        </span>
+      )}
       <span className="flex flex-col items-center gap-1">
         {account.premierRating != null && (
           <PremierBadge rating={account.premierRating} />
@@ -45,6 +74,9 @@ export function AccountCard({ account, selected, onSelect }: AccountCardProps) {
           <WingmanBadge level={account.wingmanLevel} />
         )}
         {topComp && <CompetitiveBadge level={topComp.level} />}
+        {account.premierRating == null &&
+          account.wingmanLevel == null &&
+          !topComp && <UnrankedBadge />}
       </span>
     </button>
   );

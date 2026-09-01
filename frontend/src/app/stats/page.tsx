@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Navbar } from "@/components/navbar";
+import { useAuth } from "@/components/auth-provider";
 import { getAccountStats, getAccounts } from "@/lib/api";
 import { mockAccounts } from "@/lib/mock-data";
 import type { Account, AccountStats } from "@/lib/types";
 
 export default function StatsPage() {
-  const [accounts, setAccounts] = useState<Account[]>(mockAccounts);
-  const [activeAccountId, setActiveAccountId] = useState<number>(mockAccounts[0].id);
+  const { user, loading: authLoading } = useAuth();
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [activeAccountId, setActiveAccountId] = useState<number | null>(null);
   const [stats, setStats] = useState<AccountStats | null>(null);
   const [loading, setLoading] = useState(true);
   const fetchIdRef = useRef(0);
@@ -25,6 +27,14 @@ export default function StatsPage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (authLoading) return;
+      if (!user) {
+        setAccounts(mockAccounts);
+        setActiveAccountId(mockAccounts[0]?.id ?? null);
+        setStats(null);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         const liveAccounts = await getAccounts();
@@ -34,6 +44,8 @@ export default function StatsPage() {
         if (firstId) {
           setActiveAccountId(firstId);
           await loadStats(firstId);
+        } else {
+          setStats(null);
         }
       } catch {
         setStats(null);
@@ -42,11 +54,14 @@ export default function StatsPage() {
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authLoading, user, loadStats]);
 
   const handleAccountSwitch = async (accountId: number) => {
     setActiveAccountId(accountId);
+    if (!user) {
+      setStats(null);
+      return;
+    }
     setLoading(true);
     const id = ++fetchIdRef.current;
     try {

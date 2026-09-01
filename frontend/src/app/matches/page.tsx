@@ -7,6 +7,7 @@ import { MatchDetailsModal } from "@/components/match-details-modal";
 import { MatchHistory } from "@/components/match-history";
 import { Navbar } from "@/components/navbar";
 import { Pagination } from "@/components/pagination";
+import { useAuth } from "@/components/auth-provider";
 import {
   getAccountMatches,
   getAccounts,
@@ -18,6 +19,7 @@ import { mockAccounts, mockMatches } from "@/lib/mock-data";
 import type { Account, Match } from "@/lib/types";
 
 export default function MatchesPage() {
+  const { user, loading: authLoading } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>(mockAccounts);
   const [activeAccountId, setActiveAccountId] = useState<number>(mockAccounts[0].id);
   const [matches, setMatches] = useState<Match[]>(mockMatches);
@@ -36,28 +38,36 @@ export default function MatchesPage() {
       setUsingLiveData(true);
       setError(null);
     } catch {
-      if (!usingLiveData) {
-        setMatches(mockMatches);
-      }
+      setError("Could not load matches — is the backend running?");
     }
-  }, [usingLiveData]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (authLoading || !user) {
+        setLoading(false);
+        setUsingLiveData(false);
+        setMatches(mockMatches);
+        return;
+      }
       setLoading(true);
       try {
         const liveAccounts = await getAccounts();
         if (cancelled) return;
         setAccounts(liveAccounts);
-        setActiveAccountId(liveAccounts[0]?.id ?? 0);
+        setActiveAccountId(liveAccounts[0]?.id ?? mockAccounts[0].id);
         setUsingLiveData(true);
         setError(null);
-        await loadMatches(liveAccounts[0].id);
+        if (liveAccounts[0]) {
+          await loadMatches(liveAccounts[0].id);
+        } else {
+          setMatches([]);
+        }
       } catch {
         if (!cancelled) {
           setUsingLiveData(false);
-          setMatches(mockMatches);
+          setError("Could not load accounts — is the backend running?");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -66,8 +76,7 @@ export default function MatchesPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authLoading, user, loadMatches]);
 
   const handleAccountSwitch = async (accountId: number) => {
     setActiveAccountId(accountId);
@@ -83,7 +92,7 @@ export default function MatchesPage() {
         }
       } catch {
         if (fetchIdRef.current === id) {
-          if (!usingLiveData) setMatches(mockMatches);
+          setError("Could not load matches — is the backend running?");
         }
       } finally {
         if (fetchIdRef.current === id) setLoading(false);
@@ -151,7 +160,7 @@ export default function MatchesPage() {
     <>
       <Navbar />
       <main className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 py-8">
-        <AuthBanner />
+        {!user && <AuthBanner />}
 
         {error && (
           <div
@@ -178,7 +187,7 @@ export default function MatchesPage() {
             </button>
           ))}
           <Link
-            href="/accounts"
+            href="/settings"
             aria-label="Add account"
             title="Add account"
             className="flex size-9 items-center justify-center rounded-lg text-sm text-muted transition-colors hover:bg-hover hover:text-foreground"
@@ -214,7 +223,7 @@ export default function MatchesPage() {
                 Upload .dem
               </button>
               <Link
-                href="/accounts"
+                href="/settings"
                 className="text-sm text-muted transition-colors hover:text-primary-light"
               >
                 Add match manually →
@@ -226,13 +235,15 @@ export default function MatchesPage() {
             <p className="px-1 py-8 text-center text-sm text-faint">Loading matches…</p>
           ) : matches.length === 0 ? (
             <p className="px-1 py-8 text-center text-sm text-faint">
-              No parsed matches yet — upload a .dem or connect a share code.
+              No matches yet — upload a .dem or connect a share code.
             </p>
           ) : (
             <MatchHistory
               matches={matches}
               onToggleFlag={handleToggleFlag}
-              onOpenDetails={(match) => setDetailsMatch(match)}
+              onOpenDetails={(match) => {
+                if (match.status === "Parsed") setDetailsMatch(match);
+              }}
             />
           )}
           <Pagination />

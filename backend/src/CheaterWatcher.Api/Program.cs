@@ -1,18 +1,118 @@
 using System.Text;
 using CheaterWatcher.Api.Data;
+using CheaterWatcher.Api.Domain;
+using CheaterWatcher.Api.Persistence;
+using CheaterWatcher.Api.Services;
+using CheaterWatcher.Api.Services.Auth;
+using CheaterWatcher.Api.Services.Ingestion;
+using CheaterWatcher.Api.Services.Leetify;
+using CheaterWatcher.Api.Services.Suspicion;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = 600_000_000;
+});
+
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddFixedWindowLimiter("auth", limiter =>
+    {
+        limiter.PermitLimit = 10;
+        limiter.Window = TimeSpan.FromMinutes(1);
+        limiter.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+        limiter.QueueLimit = 0;
+    });
+});
+
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? builder.Configuration["POSTGRES_CONNECTION_STRING"];
+if (!string.IsNullOrWhiteSpace(connectionString))
+{
+    var dbPassword = builder.Configuration["POSTGRES_PASSWORD"];
+    if (!string.IsNullOrWhiteSpace(dbPassword))
+        connectionString = connectionString.Replace("{POSTGRES_PASSWORD}", dbPassword);
+    else if (connectionString.Contains("{POSTGRES_PASSWORD}"))
+        connectionString = null;
+}
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    Console.Error.WriteLine("Database connection is not configured. Set a full ConnectionStrings:DefaultConnection (or POSTGRES_CONNECTION_STRING), or provide POSTGRES_PASSWORD to fill the default connection string.");
+    return;
+}
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
+
+builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
+builder.Services.Configure<LeetifyOptions>(builder.Configuration.GetSection("Leetify"));
+builder.Services.Configure<SuspicionOptions>(builder.Configuration.GetSection("Suspicion"));
+builder.Services.Configure<SteamOptions>(builder.Configuration.GetSection("Steam"));
+builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
+builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
+
+builder.Services.AddSingleton<JwtKeyProvider>();
+builder.Services.AddSingleton<TokenService>();
+builder.Services.AddSingleton<SteamOpenIdService>();
+builder.Services.AddScoped<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
+builder.Services.AddMemoryCache();
+
+// Persist the DataProtection key ring next to the JWT key so encrypted state
+// (and this warning) survives container recreation.
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, "data")));
+
+builder.Services.AddSingleton<DemoStorage>();
+builder.Services.AddSingleton<DemoExtractor>();
+builder.Services.AddSingleton<ParseQueue>();
+builder.Services.AddScoped<ShareCodeIngestionService>();
+builder.Services.AddSingleton<ISuspicionScorer, RuleBasedSuspicionScorer>();
+builder.Services.AddScoped<LeetifyService>();
+
+var leetify = builder.Configuration.GetSection("Leetify").Get<LeetifyOptions>() ?? new LeetifyOptions();
+builder.Services.AddHttpClient<LeetifyClient>(http => http.BaseAddress = new Uri(leetify.BaseUrl.TrimEnd('/') + "/"));
+builder.Services.AddHttpClient<SteamWebApiClient>(http => http.BaseAddress = new Uri("https://api.steampowered.com/"));
+builder.Services.AddHttpClient<DemoDownloader>();
+
+builder.Services.AddHostedService<ParseWorker>();
+if (!string.IsNullOrWhiteSpace(builder.Configuration["Steam:WebApiKey"]))
+    builder.Services.AddHostedService<ShareCodePollingWorker>();
+builder.Services.AddHostedService<PlayerStatsCachePurger>();
+
+const string frontendPolicy = "Frontend";
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(frontendPolicy, policy =>
+    {
+        var origins = builder.Configuration["CorsOrigins"] ?? "";
+        if (string.IsNullOrWhiteSpace(origins) || origins == "*")
+        {
+            policy.AllowAnyOrigin();
+        }
+        else
+        {
+            policy.WithOrigins(origins.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        }
+        policy.AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
 
 var jwt = builder.Configuration.GetSection("Jwt");
+var jwtKey = new JwtKeyProvider(builder.Configuration, builder.Environment).Resolve();
+var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey));
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -25,7 +125,7 @@ builder.Services
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwt["Issuer"],
             ValidAudience = jwt["Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt["SecretKey"]!))
+            IssuerSigningKey = signingKey
         };
     });
 
@@ -36,7 +136,22 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    try
+    {
+        await db.Database.MigrateAsync();
+        await DbSeeder.SeedAsync(db);
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "Database migration/seeding failed — API will keep running but DB endpoints will error until the database is reachable.");
+    }
+}
+
+app.UseCors(frontendPolicy);
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization();

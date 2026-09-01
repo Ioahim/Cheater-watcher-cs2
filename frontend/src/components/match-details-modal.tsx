@@ -214,10 +214,12 @@ export function MatchDetailsModal({
   const [roster, setRoster] = useState<MatchRoster | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [playerSteam64, setPlayerSteam64] = useState<string | null>(null);
-  const loading = open && roster === null && error === null;
+  const loading =
+    open && match?.status === "Parsed" && roster === null && error === null;
 
   useEffect(() => {
     if (!open || !match) return;
+    if (match.status !== "Parsed") return;
     const controller = new AbortController();
     getMatchPlayers(match.id)
       .then((result) => {
@@ -255,6 +257,13 @@ export function MatchDetailsModal({
         )}
         {!loading && error && (
           <p className="py-8 text-center text-sm text-danger">{error}</p>
+        )}
+        {!loading && match && match.status !== "Parsed" && (
+          <p className="py-8 text-center text-sm text-muted">
+            {match.status === "Failed"
+              ? "This demo could not be parsed, so no match details are available."
+              : "This demo is still processing — details will appear once parsing completes."}
+          </p>
         )}
         {!loading && !error && roster && (
           <div className="space-y-5">

@@ -20,11 +20,16 @@ TestResults/
 .env
 .env.*
 *.pfx
+backend/src/CheaterWatcher.Api/data/
 
 # IDE
 .vscode/
 .idea/
 *.swp
+
+# Large demo fixtures (GitHub rejects >100MB) — local testing only
+backend/tests/CheaterWatcher.Tests/Fixtures/Demos/
+backend/demos/
 
 # OS
 Thumbs.db

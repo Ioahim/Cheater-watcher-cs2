@@ -35,6 +35,8 @@ export interface MatchRoster {
   t: MatchPlayerRow[];
 }
 
+export type MatchStatus = "Pending" | "Parsed" | "Failed";
+
 export interface Match {
   id: string;
   result: MatchResult;
@@ -45,14 +47,19 @@ export interface Match {
   date: string;
   suspected?: boolean;
   flagged?: boolean;
+  status: MatchStatus;
 }
 
 export interface Account {
   id: number;
   name: string;
+  avatarUrl?: string | null;
   premierRating?: number | null;
   wingmanLevel?: number | null;
   competitiveRanks: MapRank[];
+  steamLinked?: boolean;
+  trackingEnabled?: boolean;
+  needsShareCode?: boolean;
 }
 
 export interface AuthUser {

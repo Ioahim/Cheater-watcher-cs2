@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cheater_watcher
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cheater_watcher"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=cheater_watcher;Username=postgres;Password={POSTGRES_PASSWORD}
+      CorsOrigins: ${CORS_ORIGINS:-*}
+      Steam__WebApiKey: ${STEAM_WEB_API_KEY:-}
+      Steam__PollingIntervalSeconds: ${STEAM_POLLING_INTERVAL_SECONDS:-60}
+    volumes:
+      - demos:/app/demos
+      - jwtdata:/app/data
+    ports:
+      - "${BACKEND_PORT:-5089}:5089"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      API_UPSTREAM: http://backend:5089
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+volumes:
+  pgdata:
+  demos:
+  jwtdata:

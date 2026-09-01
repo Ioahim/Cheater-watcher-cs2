@@ -214,6 +214,20 @@ export function WingmanBadge({ level }: { level: number }) {
   );
 }
 
+export function UnrankedBadge() {
+  return (
+    <Image
+      src="/ranks/competitive/0.svg"
+      alt="Unranked"
+      title="Unranked"
+      width={32}
+      height={13}
+      unoptimized
+      className="h-6 w-14 opacity-60"
+    />
+  );
+}
+
 export function RankBadge({ rank }: { rank: Rank | null }) {
   if (!rank) return null;
   if (rank.kind === "premier") return <PremierBadge rating={rank.rating} />;

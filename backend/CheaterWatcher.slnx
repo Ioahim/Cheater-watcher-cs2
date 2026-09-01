@@ -2,4 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/CheaterWatcher.Api/CheaterWatcher.Api.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CheaterWatcher.Tests/CheaterWatcher.Tests.csproj" />
+  </Folder>
 </Solution>

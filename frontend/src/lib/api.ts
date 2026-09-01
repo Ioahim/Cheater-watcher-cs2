@@ -10,7 +10,10 @@ import type {
 
 export type { AuthResponse, AuthUser };
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5089";
+// When NEXT_PUBLIC_API_URL is unset, the browser talks to the Next.js server same-origin
+// and a Proxy forwards /api/* to the backend (see src/proxy.ts). This keeps the backend
+// URL runtime-configurable for Docker instead of baking it at build time.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 const TOKEN_KEY = "cw_token";
 
 export function getToken(): string | null {
@@ -67,6 +70,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       `API error ${response.status} on ${path}`;
     throw new ApiError(response.status, msg);
   }
+
+  if (response.status === 204) return undefined as T;
 
   return (await response.json()) as T;
 }
@@ -144,6 +149,21 @@ export async function uploadDemo(
     throw new Error(`Upload failed with ${response.status}`);
   }
   return (await response.json()) as UploadResult;
+}
+
+export interface AddShareCodeResult {
+  status: "invalid" | "duplicate" | "download_failed" | "ingested";
+  matchId?: string | null;
+}
+
+export async function addShareCode(
+  accountId: number,
+  shareCode: string,
+): Promise<AddShareCodeResult> {
+  return request<AddShareCodeResult>("/api/matches/share", {
+    method: "POST",
+    body: JSON.stringify({ accountId, shareCode }),
+  });
 }
 
 // --- Matches ---
@@ -248,15 +268,26 @@ export async function exchangeSteamCode(
   });
 }
 
+export interface CredentialSaveResult {
+  status: "invalid" | "duplicate" | "download_failed" | "ingested";
+  matchId?: string | null;
+}
+
 export async function updateCredentials(
   accountId: number,
   steam64Id: string | null,
   authCode: string | null,
-): Promise<void> {
-  await request(`/api/accounts/${accountId}/credentials`, {
-    method: "PATCH",
-    body: JSON.stringify({ steam64Id, authCode }),
-  });
+  shareCode?: string | null,
+): Promise<CredentialSaveResult | null> {
+  return request<CredentialSaveResult | null>(
+    `/api/accounts/${accountId}/credentials`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ steam64Id, authCode, shareCode }),
+    },
+  );
 }
 
-export const API_BASE_URL = API_BASE;
+export async function unlinkAccount(accountId: number): Promise<void> {
+  await request(`/api/accounts/${accountId}`, { method: "DELETE" });
+}

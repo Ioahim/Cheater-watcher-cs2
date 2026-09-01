@@ -1,5 +1,21 @@
-import type { Match } from "@/lib/types";
+import type { Match, MatchStatus } from "@/lib/types";
 import { RankBadge } from "./rank-badge";
+
+function StatusBadge({ status }: { status: MatchStatus }) {
+  if (status === "Parsed") return null;
+  const pending = status === "Pending";
+  return (
+    <span
+      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+        pending
+          ? "bg-amber-400/15 text-amber-400"
+          : "bg-danger/15 text-danger"
+      }`}
+    >
+      {pending ? "Processing…" : "Failed"}
+    </span>
+  );
+}
 
 function ResultBadge({ result }: { result: Match["result"] }) {
   const win = result === "W";
@@ -121,6 +137,7 @@ export function MatchHistory({
           <span className="text-right text-xs text-faint">{match.date}</span>
           <span className="absolute left-1/2 top-1/2 hidden w-44 translate-x-[calc(-50%_-_4rem)] -translate-y-1/2 items-center gap-2 text-sm text-muted sm:flex">
             <span className="w-24 shrink-0">{match.mode}</span>
+            <StatusBadge status={match.status} />
             <RankBadge rank={match.rank} />
           </span>
         </li>

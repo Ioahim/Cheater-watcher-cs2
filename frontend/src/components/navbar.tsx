@@ -4,12 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "./auth-provider";
-import { SettingsModal } from "./settings-modal";
 
 const navLinks = [
   { href: "/stats", label: "Stats" },
   { href: "/matches", label: "Matches" },
-  { href: "/accounts", label: "Accounts" },
+  { href: "/settings", label: "Settings" },
 ];
 
 function SteamIcon({ className }: { className?: string }) {
@@ -20,7 +19,17 @@ function SteamIcon({ className }: { className?: string }) {
   );
 }
 
-function UserAvatar({ name }: { name: string }) {
+function UserAvatar({ name, avatarUrl }: { name: string; avatarUrl?: string | null }) {
+  if (avatarUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element -- remote Steam avatar, client-only
+      <img
+        src={avatarUrl}
+        alt={name}
+        className="size-8 shrink-0 rounded-full object-cover"
+      />
+    );
+  }
   return (
     <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-light text-xs font-bold text-white">
       {name.charAt(0).toUpperCase()}
@@ -32,7 +41,6 @@ export function Navbar() {
   const pathname = usePathname();
   const { user, loading, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -95,7 +103,7 @@ export function Navbar() {
                       aria-expanded={menuOpen}
                       className="flex items-center gap-2 rounded-lg py-1 pl-1 pr-2 transition-colors hover:bg-hover"
                     >
-                      <UserAvatar name={user.username} />
+                      <UserAvatar name={user.username} avatarUrl={user.avatarUrl} />
                       <span className="text-sm font-medium">{user.username}</span>
                       <svg
                         viewBox="0 0 24 24"
@@ -116,17 +124,13 @@ export function Navbar() {
                         role="menu"
                         className="absolute right-0 top-full z-50 mt-2 w-44 overflow-hidden rounded-xl border border-border bg-surface shadow-xl shadow-deep"
                       >
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => {
-                            setMenuOpen(false);
-                            setSettingsOpen(true);
-                          }}
+                        <Link
+                          href="/settings"
+                          onClick={() => setMenuOpen(false)}
                           className="block w-full px-4 py-2 text-left text-sm text-muted transition-colors hover:bg-hover hover:text-foreground"
                         >
                           Settings
-                        </button>
+                        </Link>
                         <button
                           type="button"
                           role="menuitem"
@@ -155,8 +159,6 @@ export function Navbar() {
           </div>
         </div>
       </header>
-
-      <SettingsModal key={settingsOpen ? "open" : "closed"} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>
   );
 }

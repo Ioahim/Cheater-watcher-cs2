@@ -56,6 +56,7 @@ export const mockMatches: Match[] = [
     mode: "Premier",
     rank: { kind: "premier", rating: 18342 },
     date: "02/01/2000",
+    status: "Parsed",
   },
   {
     id: "m2",
@@ -65,6 +66,7 @@ export const mockMatches: Match[] = [
     mode: "Competitive",
     rank: { kind: "competitive", level: 13 },
     date: "01/01/2000",
+    status: "Parsed",
     suspected: true,
   },
   {
@@ -75,6 +77,7 @@ export const mockMatches: Match[] = [
     mode: "Wingman",
     rank: { kind: "wingman", level: 15 },
     date: "12/30/1999",
+    status: "Parsed",
   },
   {
     id: "m4",
@@ -84,6 +87,7 @@ export const mockMatches: Match[] = [
     mode: "Competitive",
     rank: { kind: "competitive", level: 15 },
     date: "12/29/1999",
+    status: "Parsed",
   },
   {
     id: "m5",
@@ -93,6 +97,7 @@ export const mockMatches: Match[] = [
     mode: "Premier",
     rank: { kind: "premier", rating: 18342 },
     date: "12/28/1999",
+    status: "Parsed",
     flagged: true,
   },
   {
@@ -103,6 +108,7 @@ export const mockMatches: Match[] = [
     mode: "Competitive",
     rank: { kind: "competitive", level: 14 },
     date: "12/27/1999",
+    status: "Parsed",
   },
   {
     id: "m7",
@@ -112,6 +118,7 @@ export const mockMatches: Match[] = [
     mode: "Wingman",
     rank: { kind: "wingman", level: 15 },
     date: "12/26/1999",
+    status: "Parsed",
     suspected: true,
     flagged: true,
   },
@@ -123,5 +130,6 @@ export const mockMatches: Match[] = [
     mode: "Competitive",
     rank: null,
     date: "12/25/1999",
+    status: "Parsed",
   },
 ];
