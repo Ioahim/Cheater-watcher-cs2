@@ -10,7 +10,15 @@ import {
   UnrankedBadge,
   WingmanBadge,
 } from "@/components/rank-badge";
-import { exchangeSteamCode, getSteamLinkUrl, reorderAccounts, unlinkAccount } from "@/lib/api";
+import { ReplaysFolderModal } from "@/components/replays-folder-modal";
+import { SteamKeyModal } from "@/components/steam-key-modal";
+import {
+  exchangeSteamCode,
+  getSteamKeyStatus,
+  getSteamLinkUrl,
+  reorderAccounts,
+  unlinkAccount,
+} from "@/lib/api";
 import type { Account } from "@/lib/types";
 import { useAccounts } from "@/lib/use-accounts";
 
@@ -23,6 +31,9 @@ export default function AccountsPage() {
   const [pendingOrder, setPendingOrder] = useState<Account[]>([]);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [steamKeyOpen, setSteamKeyOpen] = useState(false);
+  const [folderOpen, setFolderOpen] = useState(false);
+  const [steamConfigured, setSteamConfigured] = useState<boolean | null>(null);
 
   const displayAccounts = reorderMode ? pendingOrder : accounts;
   const selected = accounts.find((a) => a.id === activeAccountId) ?? null;
@@ -147,6 +158,19 @@ export default function AccountsPage() {
     void run();
   }, [refresh]);
 
+  useEffect(() => {
+    const run = async () => {
+      await Promise.resolve();
+      try {
+        const status = await getSteamKeyStatus();
+        setSteamConfigured(status.configured);
+      } catch {
+        setSteamConfigured(null);
+      }
+    };
+    void run();
+  }, []);
+
   return (
     <>
       <Navbar />
@@ -154,6 +178,22 @@ export default function AccountsPage() {
         <div className="my-auto flex flex-col gap-8">
           <section className="space-y-4">
             <h1 className="text-center text-xl font-semibold">Accounts</h1>
+
+            {steamConfigured === false && (
+              <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3 text-sm">
+                <p className="text-muted">
+                  Steam API key not set — persona names, avatars, and VAC ban checks are
+                  off.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSteamKeyOpen(true)}
+                  className="flex-shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-light"
+                >
+                  Set it up
+                </button>
+              </div>
+            )}
 
             {loading ? (
               <p className="py-8 text-center text-sm text-faint">
@@ -265,6 +305,8 @@ export default function AccountsPage() {
                 </div>
               ) : (
                 <div className="mx-auto grid w-full max-w-2xl gap-2 sm:grid-cols-2">
+                  <SettingsButton label="Steam API key" onClick={() => setSteamKeyOpen(true)} />
+                  <SettingsButton label="Replays folder" onClick={() => setFolderOpen(true)} />
                   <SettingsButton label="Reorder accounts" onClick={enterReorderMode} />
                   <SettingsButton label="Remove account" danger onClick={openRemoveConfirm} />
                 </div>
@@ -273,6 +315,29 @@ export default function AccountsPage() {
           )}
         </div>
       </main>
+
+      {steamKeyOpen && (
+        <SteamKeyModal
+          open={steamKeyOpen}
+          onClose={() => setSteamKeyOpen(false)}
+          onSaved={async () => {
+            try {
+              const status = await getSteamKeyStatus();
+              setSteamConfigured(status.configured);
+            } catch {
+              setSteamConfigured(null);
+            }
+          }}
+        />
+      )}
+
+      {folderOpen && (
+        <ReplaysFolderModal
+          open={folderOpen}
+          onClose={() => setFolderOpen(false)}
+          onSaved={() => {}}
+        />
+      )}
 
       <Modal
         open={confirmOpen}

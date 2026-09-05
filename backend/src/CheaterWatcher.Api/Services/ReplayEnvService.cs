@@ -3,13 +3,15 @@ using Microsoft.Extensions.Options;
 namespace CheaterWatcher.Api.Services;
 
 /// <summary>
-/// Reads and writes STEAM_REPLAYS_ROOT in the repo .env file (bind-mounted into the
-/// container). The app collects the user's replays path once, persists it here, and a
-/// restart of the stack re-creates the bind mount at that path.
+/// Reads and writes app settings in the repo .env file (bind-mounted into the
+/// container). The app collects the user's replays path and Steam Web API key once,
+/// persists them here, and a restart of the stack (docker compose up -d) re-creates
+/// the containers with the new values.
 /// </summary>
 public class ReplayEnvService(IOptions<ReplayScanOptions> options, ILogger<ReplayEnvService> logger)
 {
-    private const string Key = "STEAM_REPLAYS_ROOT";
+    private const string ReplaysKey = "STEAM_REPLAYS_ROOT";
+    private const string SteamKey = "STEAM_WEB_API_KEY";
     private string? _startupEnvPath;
     private readonly object _lock = new();
 
@@ -46,7 +48,7 @@ public class ReplayEnvService(IOptions<ReplayScanOptions> options, ILogger<Repla
             var envPath = options.Value.HostEnvPath;
             if (File.Exists(envPath))
             {
-                var value = ParseLine(File.ReadAllLines(envPath));
+                var value = ParseLine(File.ReadAllLines(envPath), ReplaysKey);
                 if (!string.IsNullOrWhiteSpace(value))
                     return value;
             }
@@ -56,7 +58,30 @@ public class ReplayEnvService(IOptions<ReplayScanOptions> options, ILogger<Repla
             logger.LogWarning(ex, "Could not read {EnvPath}", options.Value.HostEnvPath);
         }
 
-        return Environment.GetEnvironmentVariable(Key) ?? "./replays";
+        return Environment.GetEnvironmentVariable(ReplaysKey) ?? "./replays";
+    }
+
+    /// <summary>
+    /// The STEAM_WEB_API_KEY value currently in the .env file, or null when absent.
+    /// </summary>
+    public string? ReadSteamApiKey()
+    {
+        try
+        {
+            var envPath = options.Value.HostEnvPath;
+            if (File.Exists(envPath))
+            {
+                var value = ParseLine(File.ReadAllLines(envPath), SteamKey);
+                if (!string.IsNullOrWhiteSpace(value))
+                    return value.Trim();
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not read {EnvPath}", options.Value.HostEnvPath);
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -78,16 +103,7 @@ public class ReplayEnvService(IOptions<ReplayScanOptions> options, ILogger<Repla
             // Docker Compose on Windows mis-parses "\" escapes (e.g. "\r") in .env, so
             // persist the path with forward slashes.
             var value = path.Trim(' ', '"').Replace('\\', '/');
-            var idx = lines.FindIndex(l => l.TrimStart().StartsWith(Key + "=", StringComparison.OrdinalIgnoreCase));
-            if (idx >= 0)
-            {
-                lines[idx] = $"{Key}={QuoteIfNeeded(value)}";
-            }
-            else
-            {
-                lines.Add($"{Key}={QuoteIfNeeded(value)}");
-                lines.Add(string.Empty);
-            }
+            UpsertLine(lines, ReplaysKey, QuoteIfNeeded(value));
 
             File.WriteAllLines(envPath, lines);
             return true;
@@ -99,20 +115,62 @@ public class ReplayEnvService(IOptions<ReplayScanOptions> options, ILogger<Repla
         }
     }
 
+    /// <summary>
+    /// Persists the given key as STEAM_WEB_API_KEY in the .env file, preserving all other
+    /// lines and comments. Returns false if the file is not mounted/accessible.
+    /// </summary>
+    public bool WriteSteamApiKey(string apiKey)
+    {
+        var envPath = options.Value.HostEnvPath;
+        if (!File.Exists(envPath))
+        {
+            logger.LogWarning("Cannot persist Steam API key: {EnvPath} not found", envPath);
+            return false;
+        }
+
+        try
+        {
+            var lines = File.ReadAllLines(envPath).ToList();
+            UpsertLine(lines, SteamKey, apiKey.Trim());
+
+            File.WriteAllLines(envPath, lines);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Could not write {EnvPath}", envPath);
+            return false;
+        }
+    }
+
+    private static void UpsertLine(List<string> lines, string key, string value)
+    {
+        var idx = lines.FindIndex(l => l.TrimStart().StartsWith(key + "=", StringComparison.OrdinalIgnoreCase));
+        if (idx >= 0)
+        {
+            lines[idx] = $"{key}={value}";
+        }
+        else
+        {
+            lines.Add($"{key}={value}");
+            lines.Add(string.Empty);
+        }
+    }
+
     private static string QuoteIfNeeded(string value)
     {
         // Paths with spaces must be quoted for docker-compose to parse them.
         return value.Contains(' ') && !value.StartsWith('"') ? $"\"{value}\"" : value;
     }
 
-    private static string? ParseLine(IEnumerable<string> lines)
+    private static string? ParseLine(IEnumerable<string> lines, string key)
     {
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
-            if (trimmed.StartsWith(Key + "=", StringComparison.OrdinalIgnoreCase))
+            if (trimmed.StartsWith(key + "=", StringComparison.OrdinalIgnoreCase))
             {
-                var value = trimmed[(Key.Length + 1)..].Trim();
+                var value = trimmed[(key.Length + 1)..].Trim();
                 return value.Length >= 2 && value.StartsWith('"') && value.EndsWith('"')
                     ? value[1..^1]
                     : value;

@@ -7,6 +7,8 @@ import type {
   PlayerDetail,
   ReplaySettings,
   SaveReplayPathResult,
+  SaveSteamKeyResult,
+  SteamKeyStatus,
 } from "./types";
 
 // When NEXT_PUBLIC_API_URL is unset, the browser talks to the Next.js server same-origin
@@ -239,6 +241,19 @@ export async function scanReplays(): Promise<void> {
 
 export async function getPendingReplays(): Promise<PendingReplay[]> {
   return request<PendingReplay[]>("/api/replays/pending");
+}
+
+// --- App settings ---
+
+export async function getSteamKeyStatus(): Promise<SteamKeyStatus> {
+  return request<SteamKeyStatus>("/api/settings/steam-key");
+}
+
+export async function saveSteamApiKey(key: string): Promise<SaveSteamKeyResult> {
+  return request<SaveSteamKeyResult>("/api/settings/steam-key", {
+    method: "PUT",
+    body: JSON.stringify({ key }),
+  });
 }
 
 export async function resolvePendingReplay(

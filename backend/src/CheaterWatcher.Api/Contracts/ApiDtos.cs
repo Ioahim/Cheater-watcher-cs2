@@ -156,6 +156,22 @@ public sealed record UpdateReplaySettingsRequest(string? Path);
 
 public sealed record SaveReplayPathResult(bool Saved, bool RestartRequired, bool CanWriteEnv, string HostPath);
 
+public sealed record SteamKeyStatusDto(
+    bool Configured,
+    bool Active,
+    string? KeyHint,
+    bool RestartRequired,
+    bool CanWriteEnv);
+
+public sealed record UpdateSteamKeyRequest(string? Key);
+
+public sealed record SaveSteamKeyResult(
+    bool Saved,
+    bool Valid,
+    bool Checked,
+    bool RestartRequired,
+    bool CanWriteEnv);
+
 public sealed record PendingReplayPlayerDto(string Steam64Id, string Name, bool Linked);
 
 public sealed record PendingReplayDto(

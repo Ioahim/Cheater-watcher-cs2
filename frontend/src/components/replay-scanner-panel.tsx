@@ -6,7 +6,6 @@ import {
   getPendingReplays,
   getReplaySettings,
   resolvePendingReplay,
-  updateReplaySettings,
 } from "@/lib/api";
 import { useAccounts } from "@/lib/use-accounts";
 import type { PendingReplay, ReplaySettings } from "@/lib/types";
@@ -19,18 +18,15 @@ export function ReplayScannerPanel({
   const { accounts } = useAccounts();
   const [settings, setSettings] = useState<ReplaySettings | null>(null);
   const [pending, setPending] = useState<PendingReplay[]>([]);
-  const [path, setPath] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [selected, setSelected] = useState<Record<string, number>>({});
 
   const refresh = useCallback(async () => {
     try {
-      const [s, p] = await Promise.all([getReplaySettings(), getPendingReplays()]);
+      const s = await getReplaySettings();
       setSettings(s);
-      setPending(p);
-      setPath(s.hostPath);
+      setPending(await getPendingReplays());
       setError(null);
     } catch {
       setError("Could not load replay scanner status.");
@@ -44,36 +40,6 @@ export function ReplayScannerPanel({
     };
     void run();
   }, [refresh]);
-
-  const handleSavePath = async () => {
-    if (!path.trim()) return;
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const result = await updateReplaySettings(path);
-      if (!result.saved || !result.canWriteEnv) {
-        setNotice(
-          "Path saved, but the container couldn't write it to .env. Set STEAM_REPLAYS_ROOT manually in docker-compose and restart.",
-        );
-        await refresh();
-      } else if (result.restartRequired) {
-        setNotice(
-          "Docker restart required — run `docker compose up -d` once so the container picks up the new replays folder, then reload this page.",
-        );
-        setSettings((cur) =>
-          cur ? { ...cur, hostPath: result.hostPath } : cur,
-        );
-      } else {
-        setNotice("Replays path saved.");
-        await refresh();
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save the replays path.");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const handleResolve = async (p: PendingReplay, accountId: number) => {
     setBusy(true);
@@ -110,37 +76,6 @@ export function ReplayScannerPanel({
       {error && (
         <div role="alert" className="rounded-lg border border-danger/40 bg-danger/10 px-4 py-2 text-sm text-danger">
           {error}
-        </div>
-      )}
-      {notice && (
-        <div className="rounded-lg border border-border bg-hover px-4 py-2 text-sm text-muted">{notice}</div>
-      )}
-
-      {!settings?.hasPath && (
-        <div className="space-y-2 text-sm">
-          <h3 className="font-semibold">Replay scanning</h3>
-          <p className="text-muted">
-            Auto-scanning looks for `.dem` files in your CS2 replays folder every{" "}
-            {settings?.scanIntervalMinutes ?? 20} minutes and attaches them to your
-            linked accounts automatically. Set your replays folder once to enable it.
-          </p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={path}
-              onChange={(e) => setPath(e.target.value)}
-              placeholder="e.g. C:\Program Files (x86)\Steam\steamapps\common\Counter-Strike Global Offensive\game\csgo\replays"
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-            />
-            <button
-              type="button"
-              onClick={handleSavePath}
-              disabled={busy || !path.trim()}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {busy ? "Saving…" : "Save"}
-            </button>
-          </div>
         </div>
       )}
 

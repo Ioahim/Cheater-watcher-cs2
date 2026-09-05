@@ -93,4 +93,34 @@ public class SteamWebApiClient
             return null;
         }
     }
+
+    /// <summary>
+    /// Checks whether a Steam Web API key is valid. GetServerInfo reports 200 even for
+    /// garbage keys, so this probes GetPlayerSummaries with a well-known public SteamID
+    /// instead: Steam answers 401/403 for invalid keys. Distinct from a plain boolean so
+    /// callers can tell "Steam rejected the key" apart from "Steam is unreachable now".
+    /// </summary>
+    public async Task<SteamKeyCheck> CheckKeyAsync(string apiKey, CancellationToken ct = default)
+    {
+        const string probeSteamId = "76561197960435530";
+        var url = $"ISteamUser/GetPlayerSummaries/v2/" +
+                  $"?key={Uri.EscapeDataString(apiKey.Trim())}" +
+                  $"&steamids={probeSteamId}";
+        try
+        {
+            using var response = await _http.GetAsync(url, ct);
+            return response.IsSuccessStatusCode ? SteamKeyCheck.Valid : SteamKeyCheck.Invalid;
+        }
+        catch (Exception)
+        {
+            return SteamKeyCheck.Unreachable;
+        }
+    }
+}
+
+public enum SteamKeyCheck
+{
+    Valid,
+    Invalid,
+    Unreachable,
 }

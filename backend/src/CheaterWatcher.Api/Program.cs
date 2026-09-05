@@ -101,7 +101,11 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<ReplayScanner>());
 
 var leetify = builder.Configuration.GetSection("Leetify").Get<LeetifyOptions>() ?? new LeetifyOptions();
 builder.Services.AddHttpClient<LeetifyClient>(http => http.BaseAddress = new Uri(leetify.BaseUrl.TrimEnd('/') + "/"));
-builder.Services.AddHttpClient<SteamWebApiClient>(http => http.BaseAddress = new Uri("https://api.steampowered.com/"));
+builder.Services.AddHttpClient<SteamWebApiClient>(http =>
+{
+    http.BaseAddress = new Uri("https://api.steampowered.com/");
+    http.Timeout = TimeSpan.FromSeconds(10);
+});
 builder.Services.AddHttpClient("steam-openid", c => c.Timeout = TimeSpan.FromSeconds(15));
 
 builder.Services.AddHostedService<ParseWorker>();

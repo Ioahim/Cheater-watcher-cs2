@@ -157,6 +157,24 @@ export interface SaveReplayPathResult {
   hostPath: string;
 }
 
+// --- App settings ---
+
+export interface SteamKeyStatus {
+  configured: boolean;
+  active: boolean;
+  keyHint: string | null;
+  restartRequired: boolean;
+  canWriteEnv: boolean;
+}
+
+export interface SaveSteamKeyResult {
+  saved: boolean;
+  valid: boolean;
+  checked: boolean;
+  restartRequired: boolean;
+  canWriteEnv: boolean;
+}
+
 export interface PendingReplayPlayer {
   steam64Id: string;
   name: string;
