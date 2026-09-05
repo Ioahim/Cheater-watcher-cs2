@@ -17,7 +17,6 @@ public sealed record ExtractedDemo(
     string Mode,
     int CtScore,
     int TScore,
-    int TotalRounds,
     IReadOnlyList<ExtractedPlayer> Players);
 
 public class DemoExtractor
@@ -78,7 +77,6 @@ public class DemoExtractor
             MapMode(demo.GameRules.QueuedMatchmakingMode),
             demo.TeamCounterTerrorist.Score,
             demo.TeamTerrorist.Score,
-            demo.GameRules.TotalRoundsPlayed,
             players);
     }
 

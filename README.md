@@ -1,82 +1,48 @@
 # Cheater Watcher CS2
 
-A tool for tracking and reporting suspected cheaters in Counter-Strike 2 matches.
+Tracks, scores, and flags suspected cheaters in your Counter-Strike 2 demos
 
 ## Stack
 
-| Layer    | Technology                                                        |
-| -------- | ----------------------------------------------------------------- |
-| Frontend | Next.js (App Router) + TypeScript + React + Tailwind CSS (bun)    |
-| API      | ASP.NET Core Web API (C#) with JWT authentication                 |
-| Data     | Entity Framework Core + PostgreSQL                                |
+| Layer    | Technology |
+| -------- | ---------- |
+| Frontend | Next.js (App Router) + TypeScript + React + Tailwind (bun) |
+| API      | ASP.NET Core Web API (C#) |
+| Data     | Entity Framework Core + PostgreSQL (Docker) |
 
-## Structure
+## Quick start (Docker)
 
-```
-Cheater-watcher-cs2/
-├── frontend/   # Next.js app (src/ directory, App Router)
-└── backend/    # ASP.NET Core solution
-    └── src/CheaterWatcher.Api/
-```
+1. `cp .env.example .env` and fill in at least `POSTGRES_PASSWORD`.
+2. `docker compose up -d --build`
+3. Open http://localhost:3000. EF Core auto-applies migrations on backend start.
 
-## Prerequisites
+## Pages
 
-- [bun](https://bun.sh) >= 1.3
-- [.NET SDK](https://dotnet.microsoft.com) >= 10.0
-- PostgreSQL running locally (or update the connection string)
+- **Matches** - upload a `.dem` (assigned to the active account, deleted after parse),
+  and the replay-folder scanner panel (set the folder, scan now, attribute pending demos).
+- **Stats** - per-account tabs plus an **All accounts** summary; flagged-players list and VAC ban counter.
+- **Accounts** - link/reorder/remove Steam accounts (OpenID), see each account's ranks.
 
-## Getting started
+## How demos become matches
 
-### Backend
+- **Replay folder scanner** - watches your CS2 replays folder (read-only bind mount,
+  configured in-app). No background downloader touches your Steam account.
+- **Manual upload** - upload any `.dem`; shown with no date (uploads are for recordings/old games).
 
-```bash
-cd backend/src/CheaterWatcher.Api
-dotnet run
-```
+## Steam Web API key (recommended)
 
-- Swagger/OpenAPI docs are available in development mode.
-- Update `ConnectionStrings:DefaultConnection` in `appsettings.json` to point to your PostgreSQL instance.
-- Replace the placeholder `Jwt:SecretKey` before deploying. For local development prefer `dotnet user-secrets`.
+Set `STEAM_WEB_API_KEY` in `.env` to enable:
+- steam account name/avatar enrichment for linked accounts, and
+- **VAC ban checks** - when you manually flag a player as Cheating/Suspicious the app
+  checks Steam; VAC-banned players get a badge, add to the banned counter, and show in
+  the stats flagged list. Without the key these are skipped.
 
-### Frontend
+Get a key at https://steamcommunity.com/dev/apikey
 
-```bash
-cd frontend
-bun install
-bun dev
-```
+## Suspicion scoring
 
-Open http://localhost:3000 in your browser.
-
-## Demo ingestion
-
-Matches reach the app in two ways:
-
-1. **Manual upload** - drop any `.dem` file (max 500 MB) through the dashboard. It is parsed in the background and assigned to the selected account.
-2. **Automatic share-code polling** - for accounts with a Steam ID + Game Authentication Code, the API polls Valve for new matches, downloads the demo from `replay*.valve.net`, decompresses it (BZip2) and parses it.
-
-### Steam Web API key
-
-Share-code polling requires **one** Steam Web API key per deployment
-(get one at <https://steamcommunity.com/dev/apikey>). The key authenticates the
-caller, not the player - a single key can poll any number of tracked players.
-Each tracked player contributes their own **Game Authentication Code**
-(CS2 → Settings → Game → "Enable Steam Cloud" / match auth code), stored on
-their account record.
-
-Never commit the key. Set it with user secrets:
-
-```bash
-cd backend/src/CheaterWatcher.Api
-dotnet user-secrets set "Steam:WebApiKey" "<your-key>"
-```
-
-Anyone cloning this repo runs their own instance with their own key.
-
-## Suspicion scoring & attribution
-
-- `suspected` is computed by this app's rule-based scorer from aggregate stats
-  of the [Leetify](https://leetify.com) public CS2 API (pre-aim, reaction time,
-  headshot/spray accuracy, counter-strafing) plus platform-ban status.
-- `flagged` is always a manual action by you.
-
+A rule-based scorer composed of the configurable `Suspicion` values in
+`appsettings.json`, fed by Leetify's public per-player stats (pre-aim, reaction time,
+headshot/spray accuracy, counter-strafing). Using donk as a benchmark, players crossing the
+weighted threshold (default `Threshold=45`) show as **Suspicious**. Manual flags
+(Cheating/Griefing/Toxic/Suspicious) are separate.

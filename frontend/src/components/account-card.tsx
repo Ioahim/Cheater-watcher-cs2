@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import type { Account } from "@/lib/types";
 import {
   CompetitiveBadge,
@@ -12,72 +13,91 @@ interface AccountCardProps {
   account: Account;
   selected: boolean;
   onSelect: () => void;
+  draggable?: boolean;
+  reorderMode?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
+  dragOver?: boolean;
 }
 
-export function AccountCard({ account, selected, onSelect }: AccountCardProps) {
+export function AccountCard({
+  account,
+  selected,
+  onSelect,
+  draggable,
+  reorderMode,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+  dragOver,
+}: AccountCardProps) {
   const topComp = [...account.competitiveRanks].sort(
     (a, b) => b.level - a.level,
   )[0];
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      className={`flex w-40 flex-col items-center gap-3 rounded-xl px-4 py-5 transition-colors ${
-        selected
-          ? "border-l-2 border-primary bg-card"
-          : "border-l-2 border-transparent hover:bg-hover"
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      className={`relative flex w-40 flex-col items-center gap-3 rounded-xl px-4 py-5 transition-colors ${
+        dragOver ? "ring-2 ring-primary" : ""
+      } ${reorderMode && !selected ? "animate-pulse-slow border-2 border-dashed border-primary/50" : ""} ${
+        selected ? "border-l-2 border-primary bg-card" : "border-l-2 border-transparent hover:bg-hover"
       }`}
     >
-      {account.avatarUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- remote Steam avatar, client-only
-        <img
-          src={account.avatarUrl}
-          alt={account.name}
-          className="size-12 rounded-full object-cover"
-        />
-      ) : (
-        <span
-          className={`flex size-12 items-center justify-center rounded-full text-sm font-bold transition-colors ${
-            selected ? "bg-primary text-white" : "bg-surface text-primary-light"
-          }`}
-        >
-          {account.name.charAt(0).toUpperCase()}
-        </span>
-      )}
-      <span
-        className={`text-sm font-medium ${selected ? "text-foreground" : "text-muted"}`}
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={selected}
+        className="flex flex-col items-center gap-3"
       >
-        {account.name}
-      </span>
-      {account.steamLinked && (
+        {account.avatarUrl ? (
+          <Image
+            src={account.avatarUrl}
+            alt={account.name}
+            width={48}
+            height={48}
+            unoptimized
+            className="size-12 rounded-full object-cover"
+          />
+        ) : (
+          <span
+            className={`flex size-12 items-center justify-center rounded-full text-sm font-bold transition-colors ${
+              selected ? "bg-primary text-white" : "bg-surface text-primary-light"
+            }`}
+          >
+            {account.name.charAt(0).toUpperCase()}
+          </span>
+        )}
         <span
-          className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-            account.trackingEnabled
-              ? "bg-success/10 text-success"
-              : "bg-amber-400/10 text-amber-400"
-          }`}
+          className={`text-sm font-medium ${selected ? "text-foreground" : "text-muted"}`}
         >
-          {account.needsShareCode
-            ? "Add share code"
-            : account.trackingEnabled
-              ? "Auto-tracking"
-              : "Add auth code"}
+          {account.name}
         </span>
-      )}
-      <span className="flex flex-col items-center gap-1">
-        {account.premierRating != null && (
-          <PremierBadge rating={account.premierRating} />
+        {account.steamLinked && (
+          <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold text-success">
+            Linked
+          </span>
         )}
-        {account.wingmanLevel != null && (
-          <WingmanBadge level={account.wingmanLevel} />
-        )}
-        {topComp && <CompetitiveBadge level={topComp.level} />}
-        {account.premierRating == null &&
-          account.wingmanLevel == null &&
-          !topComp && <UnrankedBadge />}
-      </span>
-    </button>
+        <span className="flex flex-col items-center gap-1">
+          {account.premierRating != null && (
+            <PremierBadge rating={account.premierRating} />
+          )}
+          {account.wingmanLevel != null && (
+            <WingmanBadge level={account.wingmanLevel} />
+          )}
+          {topComp && <CompetitiveBadge level={topComp.level} />}
+          {account.premierRating == null &&
+            account.wingmanLevel == null &&
+            !topComp && <UnrankedBadge />}
+        </span>
+      </button>
+    </div>
   );
 }

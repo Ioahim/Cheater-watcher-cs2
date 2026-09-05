@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { AuthProvider } from "@/components/auth-provider";
+import { Footer } from "@/components/footer";
 import "./globals.css";
 
 const departureMono = localFont({
@@ -23,7 +23,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${departureMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <AuthProvider>{children}</AuthProvider>
+        {children}
+        <Footer />
       </body>
     </html>
   );

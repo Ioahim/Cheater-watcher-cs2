@@ -7,10 +7,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<AccountMapRank> AccountMapRanks => Set<AccountMapRank>();
-    public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<Match> Matches => Set<Match>();
     public DbSet<MatchPlayer> MatchPlayers => Set<MatchPlayer>();
+    public DbSet<PlayerBanInfo> PlayerBanInfo => Set<PlayerBanInfo>();
     public DbSet<PlayerStatsCache> PlayerStatsCache => Set<PlayerStatsCache>();
+    public DbSet<PendingReplay> PendingReplays => Set<PendingReplay>();
+    public DbSet<ProcessedReplay> ProcessedReplays => Set<ProcessedReplay>();
+    public DbSet<ReplayScanSettings> ReplayScanSettings => Set<ReplayScanSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -21,21 +24,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(a => a.Name).HasMaxLength(200);
             e.Property(a => a.Steam64Id).HasMaxLength(32);
             e.HasIndex(a => a.Steam64Id).IsUnique().HasFilter("\"Steam64Id\" IS NOT NULL");
-            e.HasOne(a => a.User)
-                .WithMany(u => u.Accounts)
-                .HasForeignKey(a => a.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<AppUser>(e =>
-        {
-            e.ToTable("users");
-            e.HasKey(u => u.Id);
-            e.Property(u => u.Username).HasMaxLength(100);
-            e.HasIndex(u => u.Username).IsUnique();
-            e.Property(u => u.PasswordHash).HasMaxLength(500);
-            e.Property(u => u.Steam64Id).HasMaxLength(32);
-            e.HasIndex(u => u.Steam64Id).IsUnique().HasFilter("\"Steam64Id\" IS NOT NULL");
         });
 
         modelBuilder.Entity<AccountMapRank>(e =>
@@ -66,6 +54,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasFilter("\"DemoSourceId\" IS NOT NULL");
             e.HasIndex(m => m.FinishedAt);
             e.HasIndex(m => new { m.AccountId, m.Status });
+            e.HasIndex(m => new { m.AccountId, m.Mode, m.FinishedAt });
         });
 
         modelBuilder.Entity<MatchPlayer>(e =>
@@ -83,12 +72,57 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(p => new { p.MatchId, p.Steam64Id });
         });
 
+        modelBuilder.Entity<PlayerBanInfo>(e =>
+        {
+            e.ToTable("player_ban_info");
+            e.HasKey(c => c.Steam64Id);
+            e.Property(c => c.Steam64Id).HasMaxLength(32);
+            e.Property(c => c.EconomyBan).HasMaxLength(50);
+        });
+
         modelBuilder.Entity<PlayerStatsCache>(e =>
         {
             e.ToTable("player_stats_cache");
             e.HasKey(c => c.Steam64Id);
             e.Property(c => c.Steam64Id).HasMaxLength(32);
             e.Property(c => c.PayloadJson).HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<PendingReplay>(e =>
+        {
+            e.ToTable("pending_replays");
+            e.HasKey(p => p.Id);
+            e.Property(p => p.FileName).HasMaxLength(300);
+            e.Property(p => p.RelativePath).HasMaxLength(600);
+            e.Property(p => p.FileHash).HasMaxLength(64);
+            e.Property(p => p.MapName).HasMaxLength(100);
+            e.Property(p => p.Mode).HasMaxLength(50);
+            e.Property(p => p.PlayerSteamIdsJson).HasColumnType("jsonb");
+            e.Property(p => p.PlayerNamesJson).HasColumnType("jsonb");
+            e.HasOne(p => p.ResolvedAccount)
+                .WithMany()
+                .HasForeignKey(p => p.ResolvedAccountId)
+                .OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(p => p.FileHash);
+            e.HasIndex(p => p.Status);
+        });
+
+        modelBuilder.Entity<ProcessedReplay>(e =>
+        {
+            e.ToTable("processed_replays");
+            e.HasKey(p => p.Id);
+            e.Property(p => p.FileHash).HasMaxLength(64);
+            e.Property(p => p.FileName).HasMaxLength(300);
+            e.Property(p => p.RelativePath).HasMaxLength(600);
+            e.HasIndex(p => p.FileHash).IsUnique();
+        });
+
+        modelBuilder.Entity<ReplayScanSettings>(e =>
+        {
+            e.ToTable("replay_scan_settings");
+            e.HasKey(s => s.Id);
+            e.Property(s => s.HostPath).HasMaxLength(600);
+            e.Property(s => s.LastScanError).HasMaxLength(2000);
         });
     }
 }

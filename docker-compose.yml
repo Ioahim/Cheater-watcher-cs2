@@ -25,10 +25,12 @@ services:
       ConnectionStrings__DefaultConnection: Host=db;Port=5432;Database=cheater_watcher;Username=postgres;Password={POSTGRES_PASSWORD}
       CorsOrigins: ${CORS_ORIGINS:-*}
       Steam__WebApiKey: ${STEAM_WEB_API_KEY:-}
-      Steam__PollingIntervalSeconds: ${STEAM_POLLING_INTERVAL_SECONDS:-60}
+      Replays__RootPath: /app/replays-root
+      Replays__HostEnvPath: /run/replays.env
     volumes:
       - demos:/app/demos
-      - jwtdata:/app/data
+      - "${STEAM_REPLAYS_ROOT:-./replays}:/app/replays-root:ro"
+      - ./.env:/run/replays.env:rw
     ports:
       - "${BACKEND_PORT:-5089}:5089"
 
@@ -45,4 +47,3 @@ services:
 volumes:
   pgdata:
   demos:
-  jwtdata:

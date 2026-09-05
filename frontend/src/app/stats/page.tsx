@@ -2,25 +2,26 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Navbar } from "@/components/navbar";
-import { useAuth } from "@/components/auth-provider";
-import { getAccountStats, getAccounts } from "@/lib/api";
-import { mockAccounts } from "@/lib/mock-data";
-import type { Account, AccountStats } from "@/lib/types";
+import { PlayerDetailModal } from "@/components/player-detail-modal";
+import { getAccountStats, getAccountsSummary } from "@/lib/api";
+import { useAccounts } from "@/lib/use-accounts";
+import { FLAG_REASONS, type AccountStats } from "@/lib/types";
 
 export default function StatsPage() {
-  const { user, loading: authLoading } = useAuth();
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [activeAccountId, setActiveAccountId] = useState<number | null>(null);
+  const { accounts, activeAccountId, setActiveAccountId, loading: accountsLoading, error: accountsError } = useAccounts();
   const [stats, setStats] = useState<AccountStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [playerSteam64, setPlayerSteam64] = useState<string | null>(null);
+  const [summaryMode, setSummaryMode] = useState(false);
   const fetchIdRef = useRef(0);
 
-  const loadStats = useCallback(async (accountId: number) => {
+  const loadStats = useCallback(async (accountId: number | null) => {
     const id = ++fetchIdRef.current;
     setError(null);
     try {
-      const data = await getAccountStats(accountId);
+      const data =
+        accountId === null ? await getAccountsSummary() : await getAccountStats(accountId);
       if (fetchIdRef.current !== id) return;
       setStats(data);
     } catch {
@@ -31,73 +32,57 @@ export default function StatsPage() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (authLoading) return;
-      if (!user) {
-        setAccounts(mockAccounts);
-        setActiveAccountId(mockAccounts[0]?.id ?? null);
+    const run = async () => {
+      await Promise.resolve();
+      if (accountsLoading) return;
+      if (summaryMode) {
+        setLoading(true);
+        await loadStats(null);
+        setLoading(false);
+        return;
+      }
+      if (!activeAccountId) {
         setStats(null);
         setLoading(false);
         return;
       }
       setLoading(true);
-      setError(null);
-      try {
-        const liveAccounts = await getAccounts();
-        if (cancelled) return;
-        setAccounts(liveAccounts);
-        const firstId = liveAccounts[0]?.id;
-        if (firstId) {
-          setActiveAccountId(firstId);
-          await loadStats(firstId);
-        } else {
-          setStats(null);
-        }
-      } catch {
-        setStats(null);
-        setError("Could not load stats.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [authLoading, user, loadStats]);
+      await loadStats(activeAccountId);
+      setLoading(false);
+    };
+    void run();
+  }, [accountsLoading, activeAccountId, summaryMode, loadStats]);
 
-  const handleAccountSwitch = async (accountId: number) => {
+  const handleAccountSwitch = (accountId: number) => {
+    setSummaryMode(false);
     setActiveAccountId(accountId);
-    setError(null);
-    if (!user) {
-      setStats(null);
-      return;
-    }
-    setLoading(true);
-    const id = ++fetchIdRef.current;
-    try {
-      const data = await getAccountStats(accountId);
-      if (fetchIdRef.current === id) setStats(data);
-    } catch {
-      if (fetchIdRef.current === id) {
-        setStats(null);
-        setError("Could not load stats.");
-      }
-    } finally {
-      if (fetchIdRef.current === id) setLoading(false);
-    }
   };
 
   return (
     <>
       <Navbar />
       <main className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 py-8">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {accounts.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSummaryMode(true)}
+              className={`rounded-lg px-4 py-2 text-sm transition-colors ${
+                summaryMode
+                  ? "bg-primary/10 font-medium text-primary-light"
+                  : "text-muted hover:bg-hover hover:text-foreground"
+              }`}
+            >
+              All accounts
+            </button>
+          )}
           {accounts.map((account) => (
             <button
               key={account.id}
               type="button"
               onClick={() => handleAccountSwitch(account.id)}
               className={`rounded-lg px-4 py-2 text-sm transition-colors ${
-                account.id === activeAccountId
+                !summaryMode && account.id === activeAccountId
                   ? "bg-primary/10 font-medium text-primary-light"
                   : "text-muted hover:bg-hover hover:text-foreground"
               }`}
@@ -109,11 +94,11 @@ export default function StatsPage() {
 
         {loading ? (
           <p className="py-8 text-center text-sm text-faint">Loading stats…</p>
-        ) : error ? (
-          <p className="py-8 text-center text-sm text-danger">{error}</p>
+        ) : (error || accountsError) ? (
+          <p className="py-8 text-center text-sm text-danger">{error || accountsError}</p>
         ) : !stats ? (
           <p className="py-8 text-center text-sm text-faint">
-            No data available - upload a .dem or connect a share code.
+            No data available - upload a .dem to start tracking.
           </p>
         ) : (
           <>
@@ -122,7 +107,7 @@ export default function StatsPage() {
               <StatCard label="Flagged matches" value={stats.flaggedMatches} accent="danger" />
               <StatCard label="Flagged players" value={stats.flaggedPlayers} accent="danger" />
               <StatCard
-                label="Win rate"
+                label="Win rate against cheaters"
                 value={`${Math.round(stats.winRate * 100)}%`}
                 accent="success"
               />
@@ -173,15 +158,41 @@ export default function StatsPage() {
               <p className="px-1 text-sm text-muted">
                 Total unique players encountered: {stats.totalPlayers}
               </p>
-              {stats.flaggedPlayers > 0 && (
-                <p className="px-1 text-sm text-danger">
-                  {stats.flaggedPlayers} player(s) flagged across all matches.
-                </p>
-              )}
             </section>
+
+            {stats.flaggedPlayersList.length > 0 && (
+              <section className="space-y-3">
+                <h2 className="px-1 font-semibold">Flagged players</h2>
+                <div className="space-y-2">
+                  {stats.flaggedPlayersList.map((p) => {
+                    const reason = FLAG_REASONS.find((r) => r.value === p.flagReason) ?? FLAG_REASONS[0];
+                    return (
+                      <button
+                        key={p.steam64Id}
+                        type="button"
+                        onClick={() => setPlayerSteam64(p.steam64Id)}
+                        className="flex w-full items-center gap-2 rounded-lg bg-card px-4 py-3 text-left text-sm transition-colors hover:bg-hover"
+                      >
+                        <span className="font-medium">{p.name}</span>
+                        <span aria-hidden="true"> - </span>
+                        <span className={`${reason.color} text-xs`}>{reason.label}</span>
+                        {p.vacBanned && <span className="text-xs text-danger">VAC banned</span>}
+                        <span className="ml-auto text-xs text-muted">
+                          {p.encounters} encounter(s)
+                          {p.flagNote ? ` · ${p.flagNote}` : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
           </>
         )}
       </main>
+      {playerSteam64 && (
+        <PlayerDetailModal steam64Id={playerSteam64} open onClose={() => setPlayerSteam64(null)} />
+      )}
     </>
   );
 }
@@ -203,7 +214,7 @@ function StatCard({
         : "text-foreground";
 
   return (
-    <div className="rounded-xl bg-card px-4 py-5">
+    <div className="rounded-xl bg-card px-4 py-5 text-center">
       <p className="text-xs text-muted">{label}</p>
       <p className={`mt-1 text-xl font-bold ${valueColor}`}>{value}</p>
     </div>

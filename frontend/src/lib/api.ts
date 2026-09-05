@@ -1,44 +1,20 @@
 import type {
   Account,
   AccountStats,
-  AuthResponse,
-  AuthUser,
   Match,
   MatchRoster,
+  PendingReplay,
   PlayerDetail,
+  ReplaySettings,
+  SaveReplayPathResult,
 } from "./types";
-
-export type { AuthResponse, AuthUser };
 
 // When NEXT_PUBLIC_API_URL is unset, the browser talks to the Next.js server same-origin
 // and a Proxy forwards /api/* to the backend (see src/proxy.ts). This keeps the backend
 // URL runtime-configurable for Docker instead of baking it at build time.
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
-const TOKEN_KEY = "cw_token";
 
-export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
-}
-
-interface RequestOptions {
-  authExpected401?: boolean;
-}
-
-async function request<T>(
-  path: string,
-  init?: RequestInit,
-  opts?: RequestOptions,
-): Promise<T> {
-  const token = getToken();
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     ...Object.fromEntries(
       init?.headers instanceof Headers
@@ -48,9 +24,6 @@ async function request<T>(
           : [],
     ),
   };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
   if (
     !("Content-Type" in headers) &&
     !(init?.body instanceof FormData) &&
@@ -71,11 +44,6 @@ async function request<T>(
     throw new ApiError(0, "Could not reach the server.");
   }
 
-  if (response.status === 401 && !opts?.authExpected401) {
-    clearToken();
-    throw new AuthError();
-  }
-
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     const msg =
@@ -87,13 +55,6 @@ async function request<T>(
   if (response.status === 204) return undefined as T;
 
   return (await response.json()) as T;
-}
-
-export class AuthError extends Error {
-  constructor() {
-    super("Unauthorized");
-    this.name = "AuthError";
-  }
 }
 
 export class ApiError extends Error {
@@ -118,6 +79,10 @@ export async function getAccountMatches(accountId: number): Promise<Match[]> {
 
 export async function getAccountStats(accountId: number): Promise<AccountStats> {
   return request<AccountStats>(`/api/accounts/${accountId}/stats`);
+}
+
+export async function getAccountsSummary(): Promise<AccountStats> {
+  return request<AccountStats>("/api/accounts/summary");
 }
 
 // --- Players ---
@@ -149,38 +114,25 @@ export async function uploadDemo(
   form.append("file", file);
   form.append("accountId", String(accountId));
 
-  const token = getToken();
-  const headers: Record<string, string> = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-
-  const response = await fetch(`${API_BASE}/api/matches/upload`, {
-    method: "POST",
-    headers,
-    body: form,
-  });
-  if (response.status === 401) {
-    clearToken();
-    throw new AuthError();
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/matches/upload`, {
+      method: "POST",
+      body: form,
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(0, "Could not reach the server.");
   }
+
   if (!response.ok && response.status !== 202) {
-    throw new Error(`Upload failed with ${response.status}`);
+    const body = await response.json().catch(() => null);
+    const msg =
+      (body as { error?: string } | null)?.error ??
+      `Upload failed with ${response.status}`;
+    throw new ApiError(response.status, msg);
   }
   return (await response.json()) as UploadResult;
-}
-
-export interface AddShareCodeResult {
-  status: "invalid" | "duplicate" | "download_failed" | "ingested";
-  matchId?: string | null;
-}
-
-export async function addShareCode(
-  accountId: number,
-  shareCode: string,
-): Promise<AddShareCodeResult> {
-  return request<AddShareCodeResult>("/api/matches/share", {
-    method: "POST",
-    body: JSON.stringify({ accountId, shareCode }),
-  });
 }
 
 // --- Matches ---
@@ -208,111 +160,100 @@ export async function setPlayerFlag(
   reason?: number,
   note?: string,
 ): Promise<void> {
-  const token = getToken();
-  const headers: Record<string, string> = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  if (flagged) headers["Content-Type"] = "application/json";
-
-  const response = await fetch(
-    `${API_BASE}/api/matches/${matchId}/players/${playerId}/flag`,
+  await request<unknown>(
+    `/api/matches/${matchId}/players/${playerId}/flag`,
     {
       method: flagged ? "POST" : "DELETE",
-      headers,
+      headers: flagged ? { "Content-Type": "application/json" } : undefined,
       body: flagged ? JSON.stringify({ reason: reason ?? 1, note }) : undefined,
     },
   );
-  if (response.status === 401) {
-    clearToken();
-    throw new AuthError();
-  }
-  if (!response.ok && response.status !== 204) {
-    throw new Error(`Player flag update failed with ${response.status}`);
-  }
 }
 
 export async function setMatchFlag(
   matchId: string,
   flagged: boolean,
 ): Promise<void> {
-  const token = getToken();
-  const headers: Record<string, string> = {};
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-
-  const response = await fetch(`${API_BASE}/api/matches/${matchId}/flag`, {
-    method: flagged ? "POST" : "DELETE",
-    headers,
-  });
-  if (response.status === 401) {
-    clearToken();
-    throw new AuthError();
-  }
-  if (!response.ok && response.status !== 204) {
-    throw new Error(`Flag update failed with ${response.status}`);
-  }
+  await request<unknown>(
+    `/api/matches/${matchId}/flag`,
+    { method: flagged ? "POST" : "DELETE" },
+  );
 }
 
-// --- Auth ---
-
-export async function register(
-  username: string,
-  password: string,
-): Promise<AuthResponse> {
-  return request<AuthResponse>("/api/auth/register", {
-    method: "POST",
-    body: JSON.stringify({ username, password }),
-  }, { authExpected401: true });
-}
-
-export async function login(
-  username: string,
-  password: string,
-): Promise<AuthResponse> {
-  return request<AuthResponse>("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ username, password }),
-  }, { authExpected401: true });
-}
-
-export async function getMe(): Promise<AuthUser> {
-  return request<AuthUser>("/api/auth/me");
-}
+// --- Steam linking (anonymous) ---
 
 export async function getSteamLinkUrl(): Promise<string> {
-  const res = await request<{ url: string }>("/api/auth/steam/link", {
-    method: "GET",
-  });
+  const res = await request<{ url: string }>("/api/accounts/steam/link");
   return res.url;
 }
 
-export async function exchangeSteamCode(
-  code: string,
-): Promise<AuthUser> {
-  return request<AuthUser>("/api/auth/steam/exchange", {
+export async function exchangeSteamCode(code: string): Promise<void> {
+  await request<unknown>("/api/accounts/steam/exchange", {
     method: "POST",
     body: JSON.stringify({ code }),
   });
 }
 
-export interface CredentialSaveResult {
-  status: "invalid" | "duplicate" | "download_failed" | "ingested";
-  matchId?: string | null;
-}
-
-export async function updateCredentials(
-  accountId: number,
-  steam64Id: string | null,
-  authCode: string | null,
-  shareCode?: string | null,
-): Promise<CredentialSaveResult | null> {
-  return request<CredentialSaveResult | null>(
-    `/api/accounts/${accountId}/credentials`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ steam64Id, authCode, shareCode }),
-    },
-  );
-}
-
 export async function unlinkAccount(accountId: number): Promise<void> {
   await request(`/api/accounts/${accountId}`, { method: "DELETE" });
+}
+
+export async function reorderAccounts(ids: number[]): Promise<void> {
+  await request("/api/accounts/reorder", {
+    method: "POST",
+    body: JSON.stringify({ order: ids }),
+  });
+}
+
+// --- Replay scanning ---
+
+export async function getReplaySettings(): Promise<ReplaySettings> {
+  return request<ReplaySettings>("/api/replays/settings");
+}
+
+export async function updateReplaySettings(path: string): Promise<SaveReplayPathResult> {
+  return request<SaveReplayPathResult>("/api/replays/settings", {
+    method: "PUT",
+    body: JSON.stringify({ path }),
+  });
+}
+
+export async function scanReplays(): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}/api/replays/scan`, {
+      method: "POST",
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiError(0, "Could not reach the server.");
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new ApiError(
+      response.status,
+      (body as { error?: string } | null)?.error ?? "Could not trigger a scan.",
+    );
+  }
+}
+
+export async function getPendingReplays(): Promise<PendingReplay[]> {
+  return request<PendingReplay[]>("/api/replays/pending");
+}
+
+export async function resolvePendingReplay(
+  id: string,
+  accountId: number,
+): Promise<void> {
+  await request(`/api/replays/pending/${id}/resolve`, {
+    method: "POST",
+    body: JSON.stringify({ accountId }),
+  });
+}
+
+export async function dismissPendingReplay(id: string): Promise<void> {
+  await request(`/api/replays/pending/${id}/resolve`, {
+    method: "POST",
+    body: JSON.stringify({ dismiss: true }),
+  });
 }

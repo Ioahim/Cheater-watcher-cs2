@@ -30,14 +30,14 @@ namespace CheaterWatcher.Api.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("AuthCode")
+                    b.Property<string>("AvatarUrl")
                         .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("LatestShareCode")
-                        .HasColumnType("text");
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -51,9 +51,6 @@ namespace CheaterWatcher.Api.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
-                    b.Property<int?>("UserId")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("WingmanLevel")
                         .HasColumnType("integer");
 
@@ -62,8 +59,6 @@ namespace CheaterWatcher.Api.Migrations
                     b.HasIndex("Steam64Id")
                         .IsUnique()
                         .HasFilter("\"Steam64Id\" IS NOT NULL");
-
-                    b.HasIndex("UserId");
 
                     b.ToTable("accounts", (string)null);
                 });
@@ -85,46 +80,6 @@ namespace CheaterWatcher.Api.Migrations
                     b.ToTable("account_map_ranks", (string)null);
                 });
 
-            modelBuilder.Entity("CheaterWatcher.Api.Domain.AppUser", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("AvatarUrl")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PasswordHash")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<string>("Steam64Id")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.Property<string>("Username")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Steam64Id")
-                        .IsUnique()
-                        .HasFilter("\"Steam64Id\" IS NOT NULL");
-
-                    b.HasIndex("Username")
-                        .IsUnique();
-
-                    b.ToTable("users", (string)null);
-                });
-
             modelBuilder.Entity("CheaterWatcher.Api.Domain.Match", b =>
                 {
                     b.Property<Guid>("Id")
@@ -139,6 +94,9 @@ namespace CheaterWatcher.Api.Migrations
 
                     b.Property<int>("CtScore")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("DeleteDemoAfterParse")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("DemoFileName")
                         .IsRequired()
@@ -172,7 +130,16 @@ namespace CheaterWatcher.Api.Migrations
                     b.Property<int?>("OurTeamNumber")
                         .HasColumnType("integer");
 
+                    b.Property<short?>("OwnRankType")
+                        .HasColumnType("smallint");
+
+                    b.Property<int?>("OwnRankValue")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("ParsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ScoredAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Source")
@@ -196,6 +163,8 @@ namespace CheaterWatcher.Api.Migrations
                         .HasFilter("\"DemoSourceId\" IS NOT NULL");
 
                     b.HasIndex("AccountId", "Status");
+
+                    b.HasIndex("AccountId", "Mode", "FinishedAt");
 
                     b.ToTable("matches", (string)null);
                 });
@@ -263,6 +232,105 @@ namespace CheaterWatcher.Api.Migrations
                     b.ToTable("match_players", (string)null);
                 });
 
+            modelBuilder.Entity("CheaterWatcher.Api.Domain.PendingReplay", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("DiscoveredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("LastWriteTimeUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MapName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("PlayerNamesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("PlayerSteamIdsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("RelativePath")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)");
+
+                    b.Property<int?>("ResolvedAccountId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FileHash");
+
+                    b.HasIndex("ResolvedAccountId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("pending_replays", (string)null);
+                });
+
+            modelBuilder.Entity("CheaterWatcher.Api.Domain.PlayerBanInfo", b =>
+                {
+                    b.Property<string>("Steam64Id")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<bool>("CommunityBanned")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("DaysSinceLastBan")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EconomyBan")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("FetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("NumberOfGameBans")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NumberOfVACBans")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("VacBanned")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Steam64Id");
+
+                    b.ToTable("player_ban_info", (string)null);
+                });
+
             modelBuilder.Entity("CheaterWatcher.Api.Domain.PlayerStatsCache", b =>
                 {
                     b.Property<string>("Steam64Id")
@@ -281,14 +349,78 @@ namespace CheaterWatcher.Api.Migrations
                     b.ToTable("player_stats_cache", (string)null);
                 });
 
-            modelBuilder.Entity("CheaterWatcher.Api.Domain.Account", b =>
+            modelBuilder.Entity("CheaterWatcher.Api.Domain.ProcessedReplay", b =>
                 {
-                    b.HasOne("CheaterWatcher.Api.Domain.AppUser", "User")
-                        .WithMany("Accounts")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
 
-                    b.Navigation("User");
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("FileHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("LastWriteTimeUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RelativePath")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FileHash")
+                        .IsUnique();
+
+                    b.ToTable("processed_replays", (string)null);
+                });
+
+            modelBuilder.Entity("CheaterWatcher.Api.Domain.ReplayScanSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("HostPath")
+                        .IsRequired()
+                        .HasMaxLength(600)
+                        .HasColumnType("character varying(600)");
+
+                    b.Property<DateTime?>("LastScanAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LastScanAttributed")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("LastScanError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("LastScanNew")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LastScanPending")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("replay_scan_settings", (string)null);
                 });
 
             modelBuilder.Entity("CheaterWatcher.Api.Domain.AccountMapRank", b =>
@@ -324,16 +456,21 @@ namespace CheaterWatcher.Api.Migrations
                     b.Navigation("Match");
                 });
 
+            modelBuilder.Entity("CheaterWatcher.Api.Domain.PendingReplay", b =>
+                {
+                    b.HasOne("CheaterWatcher.Api.Domain.Account", "ResolvedAccount")
+                        .WithMany()
+                        .HasForeignKey("ResolvedAccountId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("ResolvedAccount");
+                });
+
             modelBuilder.Entity("CheaterWatcher.Api.Domain.Account", b =>
                 {
                     b.Navigation("MapRanks");
 
                     b.Navigation("Matches");
-                });
-
-            modelBuilder.Entity("CheaterWatcher.Api.Domain.AppUser", b =>
-                {
-                    b.Navigation("Accounts");
                 });
 
             modelBuilder.Entity("CheaterWatcher.Api.Domain.Match", b =>

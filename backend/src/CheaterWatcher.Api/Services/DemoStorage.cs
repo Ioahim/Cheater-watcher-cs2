@@ -22,16 +22,6 @@ public class DemoStorage(IOptions<StorageOptions> options, IHostEnvironment env)
         Directory.CreateDirectory(_root);
     }
 
-    public async Task<string> SaveAsync(Stream content, string fileName, CancellationToken ct = default)
-    {
-        EnsureRoot();
-        var safeName = Path.GetFileName(fileName);
-        var target = Path.Combine(_root, safeName);
-        await using var fs = File.Create(target);
-        await content.CopyToAsync(fs, ct);
-        return target;
-    }
-
     public static async Task<string> ComputeSha256Async(string filePath, CancellationToken ct = default)
     {
         await using var fs = File.OpenRead(filePath);

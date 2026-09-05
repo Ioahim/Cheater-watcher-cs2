@@ -2,11 +2,9 @@ using System.Text.Json;
 using CheaterWatcher.Api.Contracts;
 using CheaterWatcher.Api.Data;
 using CheaterWatcher.Api.Domain;
-using CheaterWatcher.Api.Infrastructure;
 using CheaterWatcher.Api.Services;
 using CheaterWatcher.Api.Services.Ingestion;
 using CheaterWatcher.Api.Services.Suspicion;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -20,14 +18,13 @@ public class MatchesController(
     AppDbContext db,
     DemoStorage storage,
     ParseQueue queue,
-    ShareCodeIngestionService shareIngestion,
+    BanCheckQueue banQueue,
     IOptions<SuspicionOptions> suspicionOptions,
     ILogger<MatchesController> logger) : ControllerBase
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
 
     [HttpPost("upload")]
-    [Authorize]
     [EnableRateLimiting("upload")]
     [RequestSizeLimit(600_000_000)]
     public async Task<ActionResult<UploadResponse>> Upload([FromForm] IFormFile? file, [FromForm] int accountId, CancellationToken ct)
@@ -41,9 +38,8 @@ public class MatchesController(
         if (file.Length > storage.MaxUploadBytes)
             return BadRequest(new { error = $"File exceeds the {storage.MaxUploadBytes / (1024 * 1024)} MB limit." });
 
-        var userId = User.TryGetUserId();
         var account = await db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId, ct);
-        if (account is null || account.UserId != userId)
+        if (account is null)
             return NotFound(new { error = "Account not found." });
 
         storage.EnsureRoot();
@@ -61,29 +57,30 @@ public class MatchesController(
             if (existing is not null)
                 return Ok(new UploadResponse(existing.Id, Duplicate: true));
 
-            var finalName = Path.GetFileName(file.FileName);
-            var finalPath = Path.Combine(storage.Root, finalName);
-            if (System.IO.File.Exists(finalPath))
+            var freshName = Path.GetFileName(file.FileName);
+            var freshPath = Path.Combine(storage.Root, freshName);
+            if (System.IO.File.Exists(freshPath))
             {
-                var stem = Path.GetFileNameWithoutExtension(finalName);
-                var ext = Path.GetExtension(finalName);
-                finalPath = Path.Combine(storage.Root, $"{stem}_{hash[..8]}{ext}");
+                var stem = Path.GetFileNameWithoutExtension(freshName);
+                var ext = Path.GetExtension(freshName);
+                freshPath = Path.Combine(storage.Root, $"{stem}_{hash[..8]}{ext}");
                 var attempt = 1;
-                while (System.IO.File.Exists(finalPath))
-                    finalPath = Path.Combine(storage.Root, $"{stem}_{hash[..8]}_{attempt++}{ext}");
+                while (System.IO.File.Exists(freshPath))
+                    freshPath = Path.Combine(storage.Root, $"{stem}_{hash[..8]}_{attempt++}{ext}");
             }
-            System.IO.File.Move(tempPath, finalPath);
+            System.IO.File.Move(tempPath, freshPath);
 
             var match = new Match
             {
                 Id = Guid.NewGuid(),
                 AccountId = accountId,
                 Source = MatchSource.Upload,
-                DemoFileName = Path.GetFileName(finalPath),
+                DemoFileName = Path.GetFileName(freshPath),
                 DemoSourceId = hash,
                 Status = ParseStatus.Pending,
-                FinishedAt = System.IO.File.GetLastWriteTimeUtc(finalPath),
+                FinishedAt = System.IO.File.GetLastWriteTimeUtc(freshPath),
                 CreatedAt = DateTime.UtcNow,
+                DeleteDemoAfterParse = true,
             };
             db.Matches.Add(match);
             try
@@ -94,7 +91,7 @@ public class MatchesController(
             {
                 // A concurrent identical upload won the race on the unique
                 // (AccountId, DemoSourceId) index. Return the already-existing record.
-                System.IO.File.Delete(finalPath);
+                System.IO.File.Delete(freshPath);
                 if (db.Entry(match).State != EntityState.Detached)
                     db.Entry(match).State = EntityState.Detached;
                 var dup = await db.Matches.FirstOrDefaultAsync(m => m.AccountId == accountId && m.DemoSourceId == hash, ct);
@@ -103,7 +100,7 @@ public class MatchesController(
                 return Ok(new UploadResponse(dup.Id, Duplicate: true));
             }
 
-            await queue.EnqueueAsync(new ParseJob(match.Id, finalPath), ct);
+            await queue.EnqueueAsync(new ParseJob(match.Id, freshPath), ct);
             logger.LogInformation("Queued upload {MatchId} ({File})", match.Id, match.DemoFileName);
 
             return Accepted(new UploadResponse(match.Id, Duplicate: false));
@@ -115,42 +112,11 @@ public class MatchesController(
         }
     }
 
-    [Authorize]
-    [EnableRateLimiting("share")]
-    [HttpPost("share")]
-    public async Task<ActionResult<AddShareCodeResponse>> AddShareCode(AddShareCodeRequest request, CancellationToken ct)
-    {
-        var userId = User.TryGetUserId();
-        var code = request.ShareCode?.Trim();
-        if (string.IsNullOrWhiteSpace(code))
-            return BadRequest(new { error = "No share code provided." });
-
-        var account = await db.Accounts.FirstOrDefaultAsync(a => a.Id == request.AccountId, ct);
-        if (account is null || account.UserId != userId)
-            return NotFound(new { error = "Account not found." });
-
-        var result = await shareIngestion.IngestAsync(db, account.Id, code, ct);
-        return Ok(new AddShareCodeResponse(result.Status, result.MatchId));
-    }
-
-    // Guests may read only matches of ownerless demo accounts; users read their own.
-    private System.Linq.Expressions.Expression<Func<Match, bool>> ReadableMatches()
-    {
-        var userId = User.TryGetUserId();
-        return m => userId == null ? m.Account.UserId == null : m.Account.UserId == userId;
-    }
-
-    // Mutations require an authenticated user who owns the account.
-    private System.Linq.Expressions.Expression<Func<Match, bool>> OwnedMatches() =>
-        m => m.Account.UserId == User.TryGetUserId();
-
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<MatchStatusDto>> GetStatus(Guid id, CancellationToken ct)
     {
         var match = await db.Matches.AsNoTracking()
-            .Include(m => m.Account)
             .Where(m => m.Id == id)
-            .Where(ReadableMatches())
             .FirstOrDefaultAsync(ct);
         if (match is null)
             return NotFound();
@@ -167,39 +133,73 @@ public class MatchesController(
     public async Task<ActionResult<MatchRosterDto>> GetPlayers(Guid id, CancellationToken ct)
     {
         var match = await db.Matches.AsNoTracking()
-            .Include(m => m.Account)
             .Include(m => m.Players)
+            .Include(m => m.Account)
             .Where(m => m.Id == id)
-            .Where(ReadableMatches())
             .FirstOrDefaultAsync(ct);
         if (match is null)
             return NotFound();
 
         var threshold = suspicionOptions.Value.Threshold;
+        var ownSteam64Id = match.Account?.Steam64Id;
+
+        var playerIds = match.Players.Select(p => p.Steam64Id).ToList();
+        var vacBannedIds = await db.PlayerBanInfo.AsNoTracking()
+            .Where(c => playerIds.Contains(c.Steam64Id) && c.VacBanned)
+            .Select(c => c.Steam64Id)
+            .ToHashSetAsync(ct);
 
         static decimal Kd(MatchPlayerDto p) => p.Kills / Math.Max(1m, p.Deaths);
 
         return Ok(new MatchRosterDto(
             Ct: match.Players.Where(p => p.TeamNumber == 3)
-                .Select(p => ToPlayerDto(p, match.Mode, threshold))
+                .Select(p => ToPlayerDto(p, match.Mode, threshold, vacBannedIds.Contains(p.Steam64Id), p.Steam64Id == ownSteam64Id))
                 .OrderByDescending(Kd)
                 .ToList(),
             T: match.Players.Where(p => p.TeamNumber == 2)
-                .Select(p => ToPlayerDto(p, match.Mode, threshold))
+                .Select(p => ToPlayerDto(p, match.Mode, threshold, vacBannedIds.Contains(p.Steam64Id), p.Steam64Id == ownSteam64Id))
                 .OrderByDescending(Kd)
-                .ToList()));
+                .ToList(),
+            AverageRank: AverageRank(match.Mode, match.Players)));
     }
 
-    [Authorize]
+    private static RankDto? AverageRank(string mode, ICollection<MatchPlayer> players)
+    {
+        if (mode == "Premier")
+        {
+            var ratings = players
+                .Where(p => p.RankType == CsRankTypes.Premier && p.RankValue is > 0)
+                .Select(p => p.RankValue.GetValueOrDefault())
+                .ToList();
+            return ratings.Count > 0 ? new RankDto("premier", (int)Math.Round(ratings.Average()), null) : null;
+        }
+
+        if (mode is "Competitive" or "Wingman")
+        {
+            var levels = players
+                .Where(p => p.RankValue is >= 1 and <= 18)
+                .Select(p => p.RankValue.GetValueOrDefault())
+                .ToList();
+            if (levels.Count == 0)
+                return null;
+            var kind = mode == "Wingman" ? "wingman" : "competitive";
+            return new RankDto(kind, null, (int)Math.Round(levels.Average()));
+        }
+
+        return null;
+    }
+
     [HttpPost("{id:guid}/players/{playerId:long}/flag")]
     public async Task<IActionResult> FlagPlayer(Guid id, long playerId, [FromBody] FlagPlayerRequest? body, CancellationToken ct)
     {
-        var userId = User.TryGetUserId();
         var player = await db.MatchPlayers
             .Include(p => p.Match).ThenInclude(m => m.Account)
-            .FirstOrDefaultAsync(p => p.Id == playerId && p.MatchId == id && p.Match.Account.UserId == userId, ct);
+            .FirstOrDefaultAsync(p => p.Id == playerId && p.MatchId == id, ct);
         if (player is null)
             return NotFound();
+
+        if (player.Match?.Account is { Steam64Id: not null } account && player.Steam64Id == account.Steam64Id)
+            return BadRequest(new { error = "You cannot flag your own account." });
 
         if (body is { Reason: < 0 or > 4 })
             return BadRequest(new { error = "Invalid flag reason." });
@@ -208,17 +208,18 @@ public class MatchesController(
         player.FlagReason = body?.Reason ?? 1;
         player.FlagNote = body?.Note;
         await db.SaveChangesAsync(ct);
+
+        if (player.FlagReason is 1 or 4)
+            await banQueue.EnqueueAsync(new BanCheckJob(player.Steam64Id), ct);
+
         return NoContent();
     }
 
-    [Authorize]
     [HttpDelete("{id:guid}/players/{playerId:long}/flag")]
     public async Task<IActionResult> UnflagPlayer(Guid id, long playerId, CancellationToken ct)
     {
-        var userId = User.TryGetUserId();
         var player = await db.MatchPlayers
-            .Include(p => p.Match).ThenInclude(m => m.Account)
-            .FirstOrDefaultAsync(p => p.Id == playerId && p.MatchId == id && p.Match.Account.UserId == userId, ct);
+            .FirstOrDefaultAsync(p => p.Id == playerId && p.MatchId == id, ct);
         if (player is null)
             return NotFound();
 
@@ -229,14 +230,10 @@ public class MatchesController(
         return NoContent();
     }
 
-    [Authorize]
     [HttpPost("{id:guid}/flag")]
     public async Task<IActionResult> Flag(Guid id, CancellationToken ct)
     {
-        var match = await db.Matches
-            .Include(m => m.Account)
-            .Where(OwnedMatches())
-            .FirstOrDefaultAsync(m => m.Id == id, ct);
+        var match = await db.Matches.FirstOrDefaultAsync(m => m.Id == id, ct);
         if (match is null)
             return NotFound();
 
@@ -245,14 +242,10 @@ public class MatchesController(
         return NoContent();
     }
 
-    [Authorize]
     [HttpDelete("{id:guid}/flag")]
     public async Task<IActionResult> Unflag(Guid id, CancellationToken ct)
     {
-        var match = await db.Matches
-            .Include(m => m.Account)
-            .Where(OwnedMatches())
-            .FirstOrDefaultAsync(m => m.Id == id, ct);
+        var match = await db.Matches.FirstOrDefaultAsync(m => m.Id == id, ct);
         if (match is null)
             return NotFound();
 
@@ -261,7 +254,7 @@ public class MatchesController(
         return NoContent();
     }
 
-    private static MatchPlayerDto ToPlayerDto(MatchPlayer p, string mode, int threshold)
+    private static MatchPlayerDto ToPlayerDto(MatchPlayer p, string mode, int threshold, bool vacBanned, bool isOwnAccount)
     {
         var reasons = new List<PlayerReasonDto>();
         if (!string.IsNullOrEmpty(p.SuspicionBreakdownJson))
@@ -291,6 +284,8 @@ public class MatchesController(
             Flagged: p.FlaggedAt is not null,
             p.FlagReason,
             p.FlagNote,
-            RankDto.FromCapture(mode, p.RankType, p.RankValue));
+            RankDto.FromCapture(mode, p.RankType, p.RankValue),
+            vacBanned,
+            isOwnAccount);
     }
 }

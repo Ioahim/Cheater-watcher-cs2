@@ -3,7 +3,7 @@ namespace CheaterWatcher.Api.Domain;
 public enum MatchSource
 {
     Upload = 1,
-    ShareCode = 2,
+    Replay = 2,
 }
 
 public enum ParseStatus
@@ -29,9 +29,13 @@ public class Match
     public string? DemoSourceId { get; set; }
     public ParseStatus Status { get; set; } = ParseStatus.Pending;
     public string? ErrorMessage { get; set; }
+    public short? OwnRankType { get; set; }
+    public int? OwnRankValue { get; set; }
     public bool Suspected { get; set; }
+    public DateTime? ScoredAt { get; set; }
     public DateTime? FlaggedAt { get; set; }
     public DateTime? ParsedAt { get; set; }
     public DateTime CreatedAt { get; set; }
+    public bool DeleteDemoAfterParse { get; set; }
     public ICollection<MatchPlayer> Players { get; set; } = [];
 }

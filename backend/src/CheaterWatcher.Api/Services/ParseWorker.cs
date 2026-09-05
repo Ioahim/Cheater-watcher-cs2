@@ -1,8 +1,6 @@
-using System.Text.Json;
 using CheaterWatcher.Api.Data;
 using CheaterWatcher.Api.Domain;
-using CheaterWatcher.Api.Services.Leetify;
-using CheaterWatcher.Api.Services.Suspicion;
+using CheaterWatcher.Api.Services.Ingestion;
 using Microsoft.EntityFrameworkCore;
 
 namespace CheaterWatcher.Api.Services;
@@ -12,8 +10,7 @@ public class ParseWorker(
     IServiceScopeFactory scopeFactory,
     DemoExtractor extractor,
     DemoStorage storage,
-    ILogger<ParseWorker> logger) : BackgroundService
-{
+    ILogger<ParseWorker> logger) : BackgroundService{
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await RequeuePendingAsync(stoppingToken);
@@ -76,9 +73,9 @@ public class ParseWorker(
     {
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var leetify = scope.ServiceProvider.GetRequiredService<LeetifyService>();
-        var scorer = scope.ServiceProvider.GetRequiredService<ISuspicionScorer>();
-        var options = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<SuspicionOptions>>();
+        var suspicion = scope.ServiceProvider.GetRequiredService<MatchSuspicionService>();
+        var ranks = scope.ServiceProvider.GetRequiredService<RankIngest>();
+        var infoReader = scope.ServiceProvider.GetRequiredService<DemoInfoReader>();
 
         var match = await db.Matches.Include(m => m.Players).FirstOrDefaultAsync(m => m.Id == job.MatchId, ct);
         if (match is null)
@@ -110,6 +107,8 @@ public class ParseWorker(
         match.Status = ParseStatus.Parsed;
         match.ParsedAt = DateTime.UtcNow;
         match.ErrorMessage = null;
+        if (infoReader.TryReadStartTime(job.DemoPath) is { } startTime)
+            match.FinishedAt = startTime;
 
         match.Players.Clear();
         foreach (var p in extracted.Players)
@@ -127,66 +126,29 @@ public class ParseWorker(
             });
         }
 
-        if (!string.IsNullOrEmpty(account?.Steam64Id))
-        {
-            var ours = extracted.Players.FirstOrDefault(p => p.Steam64Id == account.Steam64Id);
-            if (ours is not null)
-            {
-                match.OurTeamNumber = ours.TeamNumber;
-                if (match.Mode == "Premier" && ours.RankType == CsRankTypes.Premier && ours.RankValue is { } value)
-                    account.PremierRating = value;
-            }
-        }
+        if (account is not null)
+            await ranks.ApplyAsync(account, match, extracted, ct);
 
         await db.SaveChangesAsync(ct);
 
-        await ScoreSuspicionAsync(db, leetify, scorer, options.Value, match, ct);
+        if (match.DeleteDemoAfterParse)
+            TryDeleteDemo(job.DemoPath);
+
+        await suspicion.ScoreMatchAsync(db, match, ct);
     }
 
-    private static async Task ScoreSuspicionAsync(
-        AppDbContext db,
-        LeetifyService leetify,
-        ISuspicionScorer scorer,
-        SuspicionOptions options,
-        Match match,
-        CancellationToken ct)
+    private void TryDeleteDemo(string demoPath)
     {
-        var playerRows = await db.MatchPlayers.Where(p => p.MatchId == match.Id).ToListAsync(ct);
-        var anySuspected = false;
-
-        foreach (var group in playerRows.GroupBy(p => p.Steam64Id))
+        try
         {
-            var profile = await leetify.GetProfileAsync(group.Key, ct);
-            SuspicionResult result;
-            if (profile is null || !profile.IsPublic || profile.Stats is null)
-            {
-                result = new SuspicionResult(null, IsKnown: false, options.Threshold, []);
-            }
-            else
-            {
-                var input = new SuspicionInput(
-                    profile.Stats.Preaim,
-                    profile.Stats.ReactionTimeMs,
-                    profile.Stats.AccuracyHead,
-                    profile.Stats.SprayAccuracy,
-                    profile.Stats.CounterStrafingGoodShotsRatio,
-                    profile.Bans is { Count: > 0 });
-                result = scorer.Score(input);
-            }
-
-            var breakdownJson = JsonSerializer.Serialize(result.Rules);
-            foreach (var row in group)
-            {
-                row.SuspicionScore = result.Score;
-                row.SuspicionBreakdownJson = breakdownJson;
-            }
-
-            if (result.Suspected)
-                anySuspected = true;
+            if (System.IO.File.Exists(demoPath))
+                System.IO.File.Delete(demoPath);
         }
-
-        match.Suspected = anySuspected;
-        await db.SaveChangesAsync(ct);
+        catch (Exception ex)
+        {
+            // Deleting is best-effort; a leftover demo is harmless (and re-queued only if Pending).
+            logger.LogWarning(ex, "Could not delete demo {Path} after parse", demoPath);
+        }
     }
 
     private async Task MarkFailedAsync(ParseJob job, string message, CancellationToken ct)

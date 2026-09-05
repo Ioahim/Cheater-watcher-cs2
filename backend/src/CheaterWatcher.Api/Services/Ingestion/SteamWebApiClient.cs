@@ -6,7 +6,7 @@ namespace CheaterWatcher.Api.Services.Ingestion;
 public class SteamOptions
 {
     public string WebApiKey { get; set; } = string.Empty;
-    public int PollingIntervalSeconds { get; set; } = 60;
+    public int BanCacheHours { get; set; } = 48;
 }
 
 public sealed record SteamPlayerSummary(string? PersonaName, string? AvatarFull);
@@ -20,30 +20,16 @@ public sealed record PlayerSummaryItem(
     [property: JsonPropertyName("personaname")] string? PersonaName,
     [property: JsonPropertyName("avatarfull")] string? AvatarFull);
 
-public sealed record NextMatchSharingCodeResult(
-    [property: JsonPropertyName("result")] NextMatchSharingCodePayload? Result);
+public sealed record SteamPlayerBan(
+    [property: JsonPropertyName("SteamId")] string SteamId,
+    [property: JsonPropertyName("CommunityBanned")] bool CommunityBanned,
+    [property: JsonPropertyName("VACBanned")] bool VacBanned,
+    [property: JsonPropertyName("NumberOfVACBans")] int NumberOfVACBans,
+    [property: JsonPropertyName("NumberOfGameBans")] int NumberOfGameBans,
+    [property: JsonPropertyName("DaysSinceLastBan")] int DaysSinceLastBan,
+    [property: JsonPropertyName("EconomyBan")] string EconomyBan);
 
-public sealed record NextMatchSharingCodePayload(
-    [property: JsonPropertyName("sharing_code")] string? SharingCode);
-
-/// <summary>Outcome of a single GetNextMatchSharingCode call.</summary>
-public enum ShareCodePollResult
-{
-    /// <summary>No new match code (204/202, or a 200 with empty/"n/a" sharing code).</summary>
-    NoData,
-
-    /// <summary>A decodable next match sharing code.</summary>
-    Ok,
-
-    /// <summary>Steam rejected the knowncode (412 invalid/too-old) or the auth (401/403 revoked);
-    /// polling should stop until the user supplies a fresh code / regenerates auth.</summary>
-    NeedsAttention,
-
-    /// <summary>Any other transient failure.</summary>
-    Error,
-}
-
-public sealed record ShareCodePollOutcome(ShareCodePollResult Result, string? SharingCode = null);
+public sealed record PlayerBansResult([property: JsonPropertyName("players")] List<SteamPlayerBan>? Players);
 
 public class SteamWebApiClient
 {
@@ -84,33 +70,27 @@ public class SteamWebApiClient
         }
     }
 
-    public async Task<ShareCodePollOutcome> GetNextMatchSharingCodeAsync(string steam64Id, string authCode, string knownCode, CancellationToken ct = default)
+    public async Task<SteamPlayerBan?> GetPlayerBansAsync(string steam64Id, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(_options.WebApiKey))
-            return new ShareCodePollOutcome(ShareCodePollResult.Error);
+            return null;
 
-        var url = $"ICSGOPlayers_730/GetNextMatchSharingCode/v1/" +
+        var url = "ISteamUser/GetPlayerBans/v1/" +
                   $"?key={Uri.EscapeDataString(_options.WebApiKey)}" +
-                  $"&steamid={Uri.EscapeDataString(steam64Id)}" +
-                  $"&steamidkey={Uri.EscapeDataString(authCode)}" +
-                  $"&knowncode={Uri.EscapeDataString(knownCode)}";
+                  $"&steamids={Uri.EscapeDataString(steam64Id)}";
 
-        using var response = await _http.GetAsync(url, ct);
-        if (response.StatusCode == System.Net.HttpStatusCode.NoContent || response.StatusCode == System.Net.HttpStatusCode.Accepted)
-            return new ShareCodePollOutcome(ShareCodePollResult.NoData);
+        try
+        {
+            using var response = await _http.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+                return null;
 
-        if (response.StatusCode == System.Net.HttpStatusCode.PreconditionFailed ||     // 412: knowncode invalid / too old
-            response.StatusCode == System.Net.HttpStatusCode.Unauthorized ||           // 401
-            response.StatusCode == System.Net.HttpStatusCode.Forbidden)                // 403: auth revoked
-            return new ShareCodePollOutcome(ShareCodePollResult.NeedsAttention);
-
-        if (!response.IsSuccessStatusCode)
-            return new ShareCodePollOutcome(ShareCodePollResult.Error);
-
-        var payload = await response.Content.ReadFromJsonAsync<NextMatchSharingCodeResult>(cancellationToken: ct);
-        var code = payload?.Result?.SharingCode;
-        return string.IsNullOrWhiteSpace(code) || code == "n/a"
-            ? new ShareCodePollOutcome(ShareCodePollResult.NoData)
-            : new ShareCodePollOutcome(ShareCodePollResult.Ok, code);
+            var payload = await response.Content.ReadFromJsonAsync<PlayerBansResult>(cancellationToken: ct);
+            return payload?.Players?.FirstOrDefault(p => p.SteamId == steam64Id);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 }

@@ -1,4 +1,5 @@
 import type { Match, MatchStatus } from "@/lib/types";
+import { formatDate } from "@/lib/format";
 import { RankBadge } from "./rank-badge";
 
 function StatusBadge({ status }: { status: MatchStatus }) {
@@ -37,15 +38,13 @@ function ResultBadge({ result }: { result: Match["result"] }) {
 
 export function MatchHistory({
   matches,
-  onToggleFlag,
   onOpenDetails,
 }: {
   matches: Match[];
-  onToggleFlag?: (match: Match) => void;
   onOpenDetails?: (match: Match) => void;
 }) {
   return (
-    <ul>
+    <ul className="divide-y divide-border">
       {matches.map((match) => (
         <li
           key={match.id}
@@ -62,7 +61,27 @@ export function MatchHistory({
             {match.map}
           </span>
           <span className="flex w-9 items-center justify-end gap-2">
-            {match.suspected && (
+            {match.status === "Parsed" && !match.scoredAt ? (
+              <span
+                role="status"
+                aria-label="Checking suspicious players"
+                title="Checking suspicious players"
+                className="text-faint"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="size-4 animate-spin"
+                  aria-hidden="true"
+                >
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              </span>
+            ) : match.suspected ? (
               <span
                 role="img"
                 aria-label="Suspicious player detected in this match"
@@ -83,43 +102,12 @@ export function MatchHistory({
                   <path d="M12 17h.01" />
                 </svg>
               </span>
-            )}
-            {onToggleFlag ? (
-              <button
-                type="button"
-                role="img"
-                aria-label={
-                  match.flagged ? "Remove manual flag" : "Manually flag this match"
-                }
-                title={match.flagged ? "Remove manual flag" : "Manually flag this match"}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleFlag(match);
-                }}
-                className={`transition-colors ${
-                  match.flagged
-                    ? "text-danger hover:text-danger/70"
-                    : "text-faint hover:text-danger"
-                }`}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="size-4"
-                >
-                  <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-                  <line x1="4" x2="4" y1="22" y2="15" />
-                </svg>
-              </button>
-            ) : match.flagged ? (
+            ) : null}
+            {(match.hasFlaggedPlayer || match.flagged) && (
               <span
                 role="img"
-                aria-label="Manually flagged"
-                title="Manually flagged"
+                aria-label="Flagged player in this match"
+                title="Flagged player in this match"
                 className="text-danger"
               >
                 <svg
@@ -135,9 +123,9 @@ export function MatchHistory({
                   <line x1="4" x2="4" y1="22" y2="15" />
                 </svg>
               </span>
-            ) : null}
+            )}
           </span>
-          <span className="text-right text-xs text-faint">{match.date}</span>
+          <span className="text-right text-xs text-faint">{match.date ? formatDate(match.date) : "—"}</span>
           <span className="absolute left-1/2 top-1/2 hidden w-44 translate-x-[calc(-50%_-_4rem)] -translate-y-1/2 items-center gap-2 text-sm text-muted sm:flex">
             <span className="w-24 shrink-0">{match.mode}</span>
             <StatusBadge status={match.status} />

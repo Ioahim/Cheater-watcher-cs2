@@ -109,6 +109,7 @@ function PlayerRow({
   };
 
   const flagTier = FLAG_REASONS.find((f) => f.value === player.flagReason);
+  const isOwn = player.isOwnAccount === true;
 
   return (
     <li className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-3 px-4 py-2 text-sm">
@@ -120,6 +121,11 @@ function PlayerRow({
         >
           {player.name}
         </button>
+        {isOwn && (
+          <span className="shrink-0 rounded bg-primary/15 px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary-light">
+            You
+          </span>
+        )}
         {player.suspected && (
           <span
             role="img"
@@ -142,6 +148,14 @@ function PlayerRow({
             </svg>
           </span>
         )}
+        {player.vacBanned && (
+          <span
+            title="VAC banned on Steam"
+            className="shrink-0 rounded bg-danger px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white"
+          >
+            VAC
+          </span>
+        )}
       </span>
       <RankBadge rank={player.rank} />
       <span className="w-20 text-right font-mono text-xs text-muted">
@@ -149,53 +163,58 @@ function PlayerRow({
         {player.deaths}/{player.assists}
       </span>
       <div className="relative">
-        <button
-          type="button"
-          disabled={busy}
-          role="img"
-          aria-label={
-            player.flagged ? "Remove manual flag" : "Manually flag this player"
-          }
-          title={player.flagged ? "Remove manual flag" : "Manually flag this player"}
-          onClick={() => {
-            if (player.flagged) {
-              toggleFlag(0, undefined);
-            } else {
-              setShowFlagMenu((v) => !v);
-            }
-          }}
-          className={`transition-colors ${
-            player.flagged
-              ? flagTier?.color ?? "text-danger"
-              : "text-faint hover:text-danger"
-          } ${busy ? "opacity-50" : ""}`}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="size-4"
-          >
-            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-            <line x1="4" x2="4" y1="22" y2="15" />
-          </svg>
-        </button>
-        {showFlagMenu && (
-          <div ref={flagMenuRef} className="absolute right-0 top-full z-50 mt-1 w-40 overflow-hidden rounded-xl border border-border bg-surface shadow-xl shadow-deep">
-            {FLAG_REASONS.filter((f) => f.value !== 0).map((f) => (
-              <button
-                key={f.value}
-                type="button"
-                onClick={() => toggleFlag(f.value)}
-                className={`block w-full px-4 py-2 text-left text-sm transition-colors hover:bg-hover ${f.color}`}
+        {isOwn ? (
+          <span className="pr-1 text-xs text-primary-light">You</span>
+        ) : (
+          <>
+            <button
+              type="button"
+              disabled={busy}
+              aria-label={
+                player.flagged ? "Remove manual flag" : "Manually flag this player"
+              }
+              title={player.flagged ? "Remove manual flag" : "Manually flag this player"}
+              onClick={() => {
+                if (player.flagged) {
+                  toggleFlag(0, undefined);
+                } else {
+                  setShowFlagMenu((v) => !v);
+                }
+              }}
+              className={`transition-colors ${
+                player.flagged
+                  ? flagTier?.color ?? "text-danger"
+                  : "text-faint hover:text-danger"
+              } ${busy ? "opacity-50" : ""}`}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="size-4"
               >
-                {f.label}
-              </button>
-            ))}
-          </div>
+                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                <line x1="4" x2="4" y1="22" y2="15" />
+              </svg>
+            </button>
+            {showFlagMenu && (
+              <div ref={flagMenuRef} className="absolute right-0 top-full z-50 mt-1 w-40 overflow-hidden rounded-xl border border-border bg-surface shadow-xl shadow-deep">
+                {FLAG_REASONS.filter((f) => f.value !== 0).map((f) => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    onClick={() => toggleFlag(f.value)}
+                    className={`block w-full px-4 py-2 text-left text-sm transition-colors hover:bg-hover ${f.color}`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </li>
@@ -206,10 +225,12 @@ export function MatchDetailsModal({
   match,
   open,
   onClose,
+  onFlagChanged,
 }: {
   match: Match | null;
   open: boolean;
   onClose: () => void;
+  onFlagChanged?: (matchId: string, hasFlaggedPlayer: boolean) => void;
 }) {
   const [roster, setRoster] = useState<MatchRoster | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -233,9 +254,16 @@ export function MatchDetailsModal({
   }, [open, match]);
 
   const handleFlagToggled = (player: MatchPlayerRow, flagged: boolean, reason?: number, note?: string) => {
+    if (roster && match) {
+      const hasFlagged = [...roster.ct, ...roster.t].some((p) =>
+        p.id === player.id ? flagged : p.flagged,
+      );
+      onFlagChanged?.(match.id, hasFlagged);
+    }
     setRoster((current) =>
       current
         ? {
+            ...current,
             ct: current.ct.map((p) =>
               p.id === player.id ? { ...p, flagged, flagReason: flagged ? (reason ?? p.flagReason) : 0, flagNote: flagged ? (note ?? p.flagNote) : null } : p,
             ),
@@ -267,6 +295,12 @@ export function MatchDetailsModal({
         )}
         {!loading && !error && roster && (
           <div className="space-y-5">
+            {roster.averageRank && (
+              <div className="flex items-center justify-between rounded-xl bg-card px-4 py-2 text-sm">
+                <span className="text-muted">Match average rank</span>
+                <RankBadge rank={roster.averageRank} />
+              </div>
+            )}
             <TeamSection
               side="CT"
               icon="/ranks/teams/ct.svg"

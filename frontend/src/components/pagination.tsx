@@ -1,35 +1,60 @@
 "use client";
 
-import { useState } from "react";
-
-const pages = ["1", "2", "3", "…", "N"];
-
-export function Pagination() {
-  const [current, setCurrent] = useState("1");
+export function Pagination({
+  page,
+  pageCount,
+  onPageChange,
+}: {
+  page: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (pageCount <= 1) return null;
 
   return (
-    <nav className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-      {pages.map((page) => {
-        const active = page === current;
-        const disabled = page === "…";
+    <nav
+      aria-label="Pagination"
+      className="flex items-center justify-end gap-2 border-t border-border px-5 py-3"
+    >
+      {pageItems(page, pageCount).map((item, index) => {
+        if (item === "…") {
+          return (
+            <span key={`ellipsis-${index}`} className="px-1 text-faint">
+              {item}
+            </span>
+          );
+        }
+        const active = item === page;
         return (
           <button
-            key={page}
+            key={item}
             type="button"
-            disabled={disabled}
-            onClick={() => setCurrent(page)}
+            aria-current={active ? "page" : undefined}
+            onClick={() => onPageChange(item)}
             className={`size-9 rounded-lg border text-sm transition-colors ${
               active
                 ? "border-primary bg-primary/15 font-semibold text-primary-light"
-                : disabled
-                  ? "cursor-default border-transparent text-faint"
-                  : "border-border text-muted hover:bg-hover hover:text-foreground"
+                : "border-border text-muted hover:bg-hover hover:text-foreground"
             }`}
           >
-            {page}
+            {item}
           </button>
         );
       })}
     </nav>
   );
+}
+
+function pageItems(current: number, total: number): (number | "…")[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const windowStart = Math.max(2, current - 1);
+  const windowEnd = Math.min(total - 1, current + 1);
+  const items: (number | "…")[] = [1];
+  if (windowStart > 2) items.push("…");
+  for (let i = windowStart; i <= windowEnd; i++) items.push(i);
+  if (windowEnd < total - 1) items.push("…");
+  items.push(total);
+  return items;
 }

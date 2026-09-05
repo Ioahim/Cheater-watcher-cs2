@@ -33,20 +33,16 @@ public sealed record AccountDto(
     int? PremierRating,
     int? WingmanLevel,
     IReadOnlyList<MapRankDto> CompetitiveRanks,
-    bool SteamLinked,
-    bool TrackingEnabled,
-    bool NeedsShareCode)
+    bool SteamLinked)
 {
     public static AccountDto From(Account a) => new(
         a.Id,
         a.Name,
-        a.User?.AvatarUrl,
+        a.AvatarUrl,
         a.PremierRating,
         a.WingmanLevel,
         [.. a.MapRanks.Select(r => new MapRankDto(r.Map, r.Level)).OrderByDescending(r => r.Level)],
-        !string.IsNullOrWhiteSpace(a.Steam64Id),
-        !string.IsNullOrWhiteSpace(a.Steam64Id) && !string.IsNullOrWhiteSpace(a.AuthCode),
-        !string.IsNullOrWhiteSpace(a.Steam64Id) && string.IsNullOrWhiteSpace(a.LatestShareCode));
+        !string.IsNullOrWhiteSpace(a.Steam64Id));
 }
 
 public sealed record MatchDto(
@@ -56,10 +52,12 @@ public sealed record MatchDto(
     string Map,
     string Mode,
     RankDto? Rank,
-    string Date,
+    string? Date,
     bool Suspected,
     bool Flagged,
-    string Status);
+    string Status,
+    string? ScoredAt,
+    bool HasFlaggedPlayer);
 
 public sealed record PlayerReasonDto(string Name, string Detail);
 
@@ -75,9 +73,11 @@ public sealed record MatchPlayerDto(
     bool Flagged,
     int FlagReason,
     string? FlagNote,
-    RankDto? Rank);
+    RankDto? Rank,
+    bool VacBanned,
+    bool IsOwnAccount);
 
-public sealed record MatchRosterDto(IReadOnlyList<MatchPlayerDto> Ct, IReadOnlyList<MatchPlayerDto> T);
+public sealed record MatchRosterDto(IReadOnlyList<MatchPlayerDto> Ct, IReadOnlyList<MatchPlayerDto> T, RankDto? AverageRank);
 
 public sealed record UploadResponse(Guid MatchId, bool Duplicate);
 
@@ -89,10 +89,20 @@ public sealed record AccountStatsDto(
     int TotalMatches,
     int FlaggedMatches,
     int FlaggedPlayers,
+    int BannedPlayers,
     double WinRate,
     int TotalPlayers,
     IReadOnlyList<MapStatDto> ByMap,
-    IReadOnlyList<ModeStatDto> ByMode);
+    IReadOnlyList<ModeStatDto> ByMode,
+    IReadOnlyList<FlaggedPlayerDto> FlaggedPlayersList);
+
+public sealed record FlaggedPlayerDto(
+    string Steam64Id,
+    string Name,
+    int FlagReason,
+    string? FlagNote,
+    bool VacBanned,
+    int Encounters);
 
 public sealed record MapStatDto(string Map, int Matches, double WinRate);
 
@@ -102,7 +112,7 @@ public sealed record PlayerEncounterDto(
     Guid MatchId,
     string Map,
     string Mode,
-    string Date,
+    string? Date,
     string Result,
     int Kills,
     int Deaths,
@@ -123,20 +133,38 @@ public sealed record PlayerDetailDto(
     bool Flagged,
     int FlagReason,
     string? FlagNote,
+    bool VacBanned,
     IReadOnlyList<PlayerEncounterDto> Encounters);
 
-public sealed record UpdateCredentialsRequest(string? Steam64Id, string? AuthCode, string? ShareCode = null);
-
-public sealed record AddShareCodeRequest(int AccountId, string ShareCode);
-
-public sealed record AddShareCodeResponse(string Status, Guid? MatchId = null);
-
-public sealed record AuthUserDto(int Id, string Username, string? Steam64Id, string? AvatarUrl, int? OwnAccountId, string? PersonaName = null);
-
-public sealed record RegisterRequest(string Username, string Password);
-
-public sealed record LoginRequest(string Username, string Password);
-
-public sealed record AuthResponse(string Token, AuthUserDto User);
-
 public sealed record SteamExchangeRequest(string Code);
+
+public sealed record ReorderRequest(List<int> Order);
+
+public sealed record ReplaySettingsDto(
+    bool HasPath,
+    string HostPath,
+    string EffectivePath,
+    int ScanIntervalMinutes,
+    bool RestartRequired,
+    DateTime? LastScanAt,
+    int LastScanNew,
+    int LastScanAttributed,
+    int LastScanPending,
+    string? LastScanError);
+
+public sealed record UpdateReplaySettingsRequest(string? Path);
+
+public sealed record SaveReplayPathResult(bool Saved, bool RestartRequired, bool CanWriteEnv, string HostPath);
+
+public sealed record PendingReplayPlayerDto(string Steam64Id, string Name, bool Linked);
+
+public sealed record PendingReplayDto(
+    Guid Id,
+    string FileName,
+    string MapName,
+    string Mode,
+    DateTime DiscoveredAt,
+    IReadOnlyList<PendingReplayPlayerDto> Players,
+    IReadOnlyList<int> LinkedAccountOptions);
+
+public sealed record ResolvePendingReplayRequest(int? AccountId, bool? Dismiss);

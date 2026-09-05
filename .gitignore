@@ -21,7 +21,7 @@ TestResults/
 .env.*
 !.env.example
 *.pfx
-backend/src/CheaterWatcher.Api/data/
+backend/src/CheaterWatcher.Api/[Dd]ata/
 
 # IDE
 .vscode/
@@ -31,6 +31,9 @@ backend/src/CheaterWatcher.Api/data/
 # Large demo fixtures (GitHub rejects >100MB) - local testing only
 backend/tests/CheaterWatcher.Tests/Fixtures/Demos/
 backend/demos/
+
+# Local Steam replays bind mount (default STEAM_REPLAYS_ROOT)
+replays/
 
 # OS
 Thumbs.db

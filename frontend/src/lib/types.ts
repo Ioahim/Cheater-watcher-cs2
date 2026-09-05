@@ -28,11 +28,14 @@ export interface MatchPlayerRow {
   flagReason: number;
   flagNote: string | null;
   rank: Rank | null;
+  vacBanned?: boolean;
+  isOwnAccount?: boolean;
 }
 
 export interface MatchRoster {
   ct: MatchPlayerRow[];
   t: MatchPlayerRow[];
+  averageRank?: Rank | null;
 }
 
 export type MatchStatus = "Pending" | "Parsed" | "Failed";
@@ -44,9 +47,11 @@ export interface Match {
   map: string;
   mode: string;
   rank: Rank | null;
-  date: string;
+  date: string | null;
   suspected?: boolean;
+  scoredAt: string | null;
   flagged?: boolean;
+  hasFlaggedPlayer?: boolean;
   status: MatchStatus;
 }
 
@@ -58,22 +63,6 @@ export interface Account {
   wingmanLevel?: number | null;
   competitiveRanks: MapRank[];
   steamLinked?: boolean;
-  trackingEnabled?: boolean;
-  needsShareCode?: boolean;
-}
-
-export interface AuthUser {
-  id: number;
-  username: string;
-  steam64Id: string | null;
-  avatarUrl: string | null;
-  ownAccountId: number | null;
-  personaName?: string | null;
-}
-
-export interface AuthResponse {
-  token: string;
-  user: AuthUser;
 }
 
 export const FLAG_REASONS = [
@@ -99,17 +88,28 @@ export interface AccountStats {
   totalMatches: number;
   flaggedMatches: number;
   flaggedPlayers: number;
+  bannedPlayers: number;
   winRate: number;
   totalPlayers: number;
   byMap: MapStat[];
   byMode: ModeStat[];
+  flaggedPlayersList: FlaggedPlayer[];
+}
+
+export interface FlaggedPlayer {
+  steam64Id: string;
+  name: string;
+  flagReason: number;
+  flagNote: string | null;
+  vacBanned: boolean;
+  encounters: number;
 }
 
 export interface PlayerEncounter {
   matchId: string;
   map: string;
   mode: string;
-  date: string;
+  date: string | null;
   result: MatchResult;
   kills: number;
   deaths: number;
@@ -131,5 +131,45 @@ export interface PlayerDetail {
   flagged: boolean;
   flagReason: number;
   flagNote: string | null;
+  vacBanned?: boolean;
   encounters: PlayerEncounter[];
 }
+
+// --- Replay scanning ---
+
+export interface ReplaySettings {
+  hasPath: boolean;
+  hostPath: string;
+  effectivePath: string;
+  scanIntervalMinutes: number;
+  restartRequired: boolean;
+  lastScanAt: string | null;
+  lastScanNew: number;
+  lastScanAttributed: number;
+  lastScanPending: number;
+  lastScanError: string | null;
+}
+
+export interface SaveReplayPathResult {
+  saved: boolean;
+  restartRequired: boolean;
+  canWriteEnv: boolean;
+  hostPath: string;
+}
+
+export interface PendingReplayPlayer {
+  steam64Id: string;
+  name: string;
+  linked: boolean;
+}
+
+export interface PendingReplay {
+  id: string;
+  fileName: string;
+  mapName: string;
+  mode: string;
+  discoveredAt: string;
+  players: PendingReplayPlayer[];
+  linkedAccountOptions: number[];
+}
+

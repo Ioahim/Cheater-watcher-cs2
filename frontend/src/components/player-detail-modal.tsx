@@ -8,6 +8,7 @@ import {
 } from "@/lib/api";
 import type { PlayerDetail } from "@/lib/types";
 import { FLAG_REASONS } from "@/lib/types";
+import { formatDate } from "@/lib/format";
 import { Modal } from "./modal";
 
 function FlagLabel({ reason }: { reason: number }) {
@@ -104,6 +105,20 @@ export function PlayerDetailModal({
             </div>
           )}
 
+          {detail.vacBanned && (
+            <div className="rounded-lg bg-danger/10 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-danger">
+                  VAC banned on Steam
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted">
+                This player has an active VAC ban and counts toward the banned
+                players stat.
+              </p>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
             {detail.steam64Id && (
               <a
@@ -156,7 +171,7 @@ export function PlayerDetailModal({
                       <span className="font-mono text-muted">
                         <span className="font-semibold text-foreground">{e.kills}</span>/{e.deaths}/{e.assists}
                       </span>
-                      <span className="text-faint">{e.date}</span>
+                      <span className="text-faint">{e.date ? formatDate(e.date) : "—"}</span>
                     </span>
                   </div>
                 ))}

@@ -22,15 +22,11 @@ public sealed record LeetifyStats(
     [property: JsonPropertyName("spray_accuracy")] double? SprayAccuracy,
     [property: JsonPropertyName("counter_strafing_good_shots_ratio")] double? CounterStrafingGoodShotsRatio);
 
-public sealed record LeetifyRanks(
-    [property: JsonPropertyName("premier")] double? Premier);
-
 public sealed record LeetifyProfile(
     [property: JsonPropertyName("privacy_mode")] string? PrivacyMode,
     [property: JsonPropertyName("name")] string? Name,
     [property: JsonPropertyName("bans")] List<PlatformBan>? Bans,
-    [property: JsonPropertyName("stats")] LeetifyStats? Stats,
-    [property: JsonPropertyName("ranks")] LeetifyRanks? Ranks)
+    [property: JsonPropertyName("stats")] LeetifyStats? Stats)
 {
     public bool IsPublic => string.Equals(PrivacyMode, "public", StringComparison.OrdinalIgnoreCase);
 }

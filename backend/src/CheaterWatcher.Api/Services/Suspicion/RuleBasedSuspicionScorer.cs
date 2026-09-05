@@ -1,20 +1,21 @@
 using System.Globalization;
+using CheaterWatcher.Api.Services.Leetify;
 using Microsoft.Extensions.Options;
 
 namespace CheaterWatcher.Api.Services.Suspicion;
 
 public class SuspicionOptions
 {
-    public int Threshold { get; set; } = 70;
-    public double PreaimBelowDeg { get; set; } = 7;
+    public int Threshold { get; set; } = 45;
+    public double PreaimBelowDeg { get; set; } = 9.1093;
     public int PreaimWeight { get; set; } = 25;
-    public double ReactionTimeBelowMs { get; set; } = 250;
+    public double ReactionTimeBelowMs { get; set; } = 442.1148;
     public int ReactionTimeWeight { get; set; } = 20;
-    public double HeadshotAccuracyAbovePct { get; set; } = 45;
+    public double HeadshotAccuracyAbovePct { get; set; } = 33.8285;
     public int HeadshotAccuracyWeight { get; set; } = 25;
-    public double SprayAccuracyAbovePct { get; set; } = 55;
+    public double SprayAccuracyAbovePct { get; set; } = 43.5309;
     public int SprayAccuracyWeight { get; set; } = 15;
-    public double CounterStrafingAbovePct { get; set; } = 96;
+    public double CounterStrafingAbovePct { get; set; } = 93.323;
     public int CounterStrafingWeight { get; set; } = 10;
     public int PlatformBanWeight { get; set; } = 20;
 }
@@ -25,7 +26,16 @@ public sealed record SuspicionInput(
     double? HeadshotAccuracyPct,
     double? SprayAccuracyPct,
     double? CounterStrafingPct,
-    bool HasPlatformBan);
+    bool HasPlatformBan)
+{
+    public static SuspicionInput From(LeetifyProfile profile) => new(
+        profile.Stats?.Preaim,
+        profile.Stats?.ReactionTimeMs,
+        profile.Stats?.AccuracyHead,
+        profile.Stats?.SprayAccuracy,
+        profile.Stats?.CounterStrafingGoodShotsRatio,
+        profile.Bans is { Count: > 0 });
+}
 
 public sealed record RuleHit(string Name, string Detail, int Weight, bool Triggered);
 

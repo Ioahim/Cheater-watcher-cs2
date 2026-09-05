@@ -2,7 +2,7 @@ using Microsoft.Extensions.Options;
 
 namespace CheaterWatcher.Api.Services.Auth;
 
-public sealed class SteamOpenIdService(IHttpClientFactory httpClientFactory, IOptions<AuthOptions> options)
+public sealed class SteamOpenIdService(IHttpClientFactory httpClientFactory, IOptions<OpenIdOptions> options)
 {
     private const string OpenIdEndpoint = "https://steamcommunity.com/openid/login";
 
@@ -10,7 +10,7 @@ public sealed class SteamOpenIdService(IHttpClientFactory httpClientFactory, IOp
     {
         var auth = options.Value;
         var returnUrl =
-            $"{auth.ApiBaseUrl.TrimEnd('/')}/api/auth/steam/callback?state={Uri.EscapeDataString(state)}";
+            $"{auth.ApiBaseUrl.TrimEnd('/')}/api/accounts/steam/callback?state={Uri.EscapeDataString(state)}";
         var query = new Dictionary<string, string>
         {
             ["openid.ns"] = "http://specs.openid.net/auth/2.0",
@@ -36,9 +36,10 @@ public sealed class SteamOpenIdService(IHttpClientFactory httpClientFactory, IOp
 
         // Defend against a callback with a mismatched return_to (association/replay
         // hardening). The value must point back at the exact callback we issued.
-        var expectedBase = $"{options.Value.ApiBaseUrl.TrimEnd('/')}/api/auth/steam/callback";
+        var state = query["state"].ToString();
+        var expectedReturnTo = $"{options.Value.ApiBaseUrl.TrimEnd('/')}/api/accounts/steam/callback?state={Uri.EscapeDataString(state)}";
         var returnTo = query["openid.return_to"].ToString();
-        if (!returnTo.StartsWith(expectedBase, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(returnTo, expectedReturnTo, StringComparison.OrdinalIgnoreCase))
             return null;
 
         var fields = query.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToString());
