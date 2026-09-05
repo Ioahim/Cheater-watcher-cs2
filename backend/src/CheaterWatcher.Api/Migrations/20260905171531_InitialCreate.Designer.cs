@@ -9,11 +9,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace CheaterWatcher.Api.Data.Migrations
+namespace CheaterWatcher.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260904011135_AddMatchRankSnapshot")]
-    partial class AddMatchRankSnapshot
+    [Migration("20260905171531_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -140,6 +140,9 @@ namespace CheaterWatcher.Api.Data.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("ParsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ScoredAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Source")
@@ -295,6 +298,40 @@ namespace CheaterWatcher.Api.Data.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("pending_replays", (string)null);
+                });
+
+            modelBuilder.Entity("CheaterWatcher.Api.Domain.PlayerBanInfo", b =>
+                {
+                    b.Property<string>("Steam64Id")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<bool>("CommunityBanned")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("DaysSinceLastBan")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EconomyBan")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("FetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("NumberOfGameBans")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NumberOfVACBans")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("VacBanned")
+                        .HasColumnType("boolean");
+
+                    b.HasKey("Steam64Id");
+
+                    b.ToTable("player_ban_info", (string)null);
                 });
 
             modelBuilder.Entity("CheaterWatcher.Api.Domain.PlayerStatsCache", b =>
